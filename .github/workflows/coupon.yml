@@ -1,0 +1,104 @@
+name: 嘉立创自动领券
+
+on:
+  workflow_dispatch:
+    inputs:
+      usernames:
+        description: '账号组（英文逗号分隔）'
+        required: true
+      passwords:
+        description: '密码组（英文逗号分隔，与账号对应）'
+        required: true
+
+jobs:
+  setup_matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: '动态配置矩阵'
+        id: set-matrix
+        env:
+          USERS: ${{ github.event.inputs.usernames }}
+          PASSWORDS: ${{ github.event.inputs.passwords }}
+        run: |
+          python -c '
+          import os, json
+          users = [u.strip() for u in os.environ.get("USERS", "").split(",") if u.strip()]
+          passwords = [p.strip() for p in os.environ.get("PASSWORDS", "").split(",") if p.strip()]
+          
+          if len(users) != len(passwords):
+              print("Error: 账号与密码数量不匹配")
+              exit(1)
+              
+          batch_size = 30
+          matrix = []
+          group_idx = 1
+          for i in range(0, len(users), batch_size):
+              u_batch_list = users[i:i+batch_size]
+              p_batch_list = passwords[i:i+batch_size]
+              u_batch = ",".join(u_batch_list)
+              p_batch = ",".join(p_batch_list)
+              job_name = f"账号组{group_idx}({len(u_batch_list)}个号)"
+              matrix.append({"name": job_name, "usernames": u_batch, "passwords": p_batch})
+              group_idx += 1
+              
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"matrix={json.dumps(matrix)}\n")
+          '
+
+  running:
+    name: ${{ matrix.name }}
+    needs: setup_matrix
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        include: ${{ fromJson(needs.setup_matrix.outputs.matrix) }}
+      fail-fast: false
+
+    steps:
+      - name: '检出代码'
+        uses: actions/checkout@v6
+
+      - name: '设置Python环境'
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+
+      - name: '设置Node.js环境'
+        uses: actions/setup-node@v6
+        with:
+          node-version: '18'
+
+      - name: '设置时区为北京时间'
+        run: |
+          sudo timedatectl set-timezone Asia/Shanghai
+          echo "当前时间: $(date)"
+
+      - name: '下载中文字体'
+        run: |
+           sudo apt-get update
+           sudo apt-get install -y fonts-wqy-zenhei
+
+      - name: '安装依赖'
+        run: |
+          pip install --upgrade pip
+          pip install requests==2.26.0
+          pip install selenium==3.141.0
+          pip install serverchan_sdk==1.0.6
+          pip install PyExecJS
+          pip install DrissionPage
+          
+      - name: '准备Chrome驱动'
+        uses: nanasess/setup-chromedriver@v2
+
+      - name: '安装并启动Xvfb虚拟显示器'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+          Xvfb :99 -screen 0 1024x768x24 &
+          echo "DISPLAY=:99" >> $GITHUB_ENV
+
+      - name: '进行自动领券流程'
+        run: |
+          python ./get-coupon.py "${{ matrix.usernames }}" "${{ matrix.passwords }}"

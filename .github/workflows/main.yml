@@ -1,0 +1,200 @@
+name: 嘉立创注册机
+
+on:
+  workflow_dispatch:
+    inputs:
+      total_accounts:
+        description: '需要注册的账号总数 (最大100)'
+        required: true
+        type: number
+        default: 10
+      password:
+        description: '统一设置的密码'
+        required: true
+        type: string
+        default: 'JLCjlc476743'
+      start_email_index:
+        description: '邮箱初始递增序号 (未配置默认从1开始)'
+        required: true
+        type: number
+        default: 1
+
+jobs:
+  # Job 1: 预处理阶段 - 校验输入并动态生成矩阵分配计划
+  setup_matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: '动态配置矩阵'
+        id: set-matrix
+        run: |
+          TOTAL=${{ github.event.inputs.total_accounts }}
+          START_IDX=${{ github.event.inputs.start_email_index }}
+          
+          JSON="["
+          REMAINING=$TOTAL
+          CURRENT_IDX=$START_IDX
+          BATCH=1
+          
+          while [ $REMAINING -gt 0 ] && [ $BATCH -le 5 ]; do
+            COUNT=$REMAINING
+            if [ $COUNT -gt 20 ]; then
+              COUNT=20
+            fi
+            
+            if [ $BATCH -gt 1 ]; then
+              JSON="$JSON,"
+            fi
+            
+            # 生成单个批次的 JSON 参数
+            JSON="$JSON{\"batch\": $BATCH, \"count\": $COUNT, \"start_idx\": $CURRENT_IDX}"
+            
+            # 扣除已分配数量，递增邮箱和批次号
+            REMAINING=$((REMAINING - COUNT))
+            CURRENT_IDX=$((CURRENT_IDX + COUNT))
+            BATCH=$((BATCH + 1))
+          done
+          JSON="$JSON]"
+          
+          echo "生成的分批矩阵: $JSON"
+          echo "matrix=$JSON" >> $GITHUB_OUTPUT
+
+  # Job 2: 核心执行阶段 - 读取矩阵配置，串行执行
+  running:
+    needs: setup_matrix
+    runs-on: ubuntu-22.04
+    strategy:
+      max-parallel: 1 # 核心: 强制取消并发，确保 Job 按顺序串行
+      fail-fast: false
+      matrix:
+        batch_info: ${{ fromJson(needs.setup_matrix.outputs.matrix) }}
+    steps:
+      - name: '检出代码'
+        uses: actions/checkout@v6
+
+      - name: '设置Python环境'
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+          
+      - name: '设置Node.js环境'
+        uses: actions/setup-node@v6
+        with:
+          node-version: '18'
+
+      - name: '设置时区为北京时间'
+        run: |
+          sudo timedatectl set-timezone Asia/Shanghai
+          echo "当前时间: $(date)"
+
+      - name: '安装依赖'
+        run: |
+          pip install --upgrade pip
+          pip install requests==2.26.0 selenium==3.141.0 PyExecJS DrissionPage
+
+      - name: '准备Chrome驱动'
+        uses: nanasess/setup-chromedriver@v2
+
+      - name: '安装并启动Xvfb虚拟显示器'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+
+          Xvfb :99 -screen 0 1024x768x24 &
+          echo "DISPLAY=:99" >> $GITHUB_ENV          
+
+      - name: '运行注册脚本 (批次 ${{ matrix.batch_info.batch }})'
+        run: |
+          # 传入动态计算好的 数量、密码、递增序号
+          python -u jlc-signup.py ${{ matrix.batch_info.count }} '${{ github.event.inputs.password }}' ${{ matrix.batch_info.start_idx }}
+
+      - name: '重命名结果文件以便独立上传'
+        run: |
+          if [ -f account.txt ]; then
+            # 添加批次标识防止不同 job 的结果文件同名冲突
+            mv account.txt batch-${{ matrix.batch_info.batch }}-account.txt
+          fi
+
+      - name: '上传单批次临时文件'
+        uses: actions/upload-artifact@v7
+        with:
+          path: batch-${{ matrix.batch_info.batch }}-account.txt
+          archive: false
+          if-no-files-found: ignore
+          retention-days: 1
+
+# Job 3: 汇总与清理阶段
+  merge_and_clean:
+    needs: [setup_matrix, running]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: '检出代码'
+        uses: actions/checkout@v6
+
+      - name: '下载所有批次的临时文件'
+        uses: actions/download-artifact@v8
+        with:
+          path: temp_artifacts
+
+      - name: '合并结果文件'
+        id: merge
+        run: |
+          TOTAL=${{ github.event.inputs.total_accounts }}
+          MERGED_FILE="${TOTAL}个账号注册结果.txt"
+          touch "$MERGED_FILE"
+          
+          # 提取下载目录下所有的 batch 文件并合并到最终文件
+          find temp_artifacts -type f -name "batch-*-account.txt" | sort | while read file; do
+            cat "$file" >> "$MERGED_FILE"
+          done
+          
+          if [ -s "$MERGED_FILE" ]; then
+            echo "has_data=true" >> $GITHUB_OUTPUT
+            echo "filename=$MERGED_FILE" >> $GITHUB_OUTPUT
+          else
+            echo "has_data=false" >> $GITHUB_OUTPUT
+            echo "未提取到任何注册账号数据，可能所有批次均运行失败"
+          fi
+
+      - name: '上传整合文件'
+        if: steps.merge.outputs.has_data == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          path: ${{ steps.merge.outputs.filename }}
+          archive: false
+          if-no-files-found: ignore
+          retention-days: 10
+
+      - name: '设置Python环境用于推送'
+        if: steps.merge.outputs.has_data == 'true'
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+          
+      - name: '安装推送所需依赖'
+        if: steps.merge.outputs.has_data == 'true'
+        run: pip install requests
+
+      - name: '推送到支持平台'
+        if: steps.merge.outputs.has_data == 'true'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          WECHAT_WEBHOOK_KEY: ${{ secrets.WECHAT_WEBHOOK_KEY }}
+          DINGTALK_WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+          SERVERCHAN_SCKEY: ${{ secrets.SERVERCHAN_SCKEY }}
+          SERVERCHAN3_SCKEY: ${{ secrets.SERVERCHAN3_SCKEY }}
+          COOLPUSH_SKEY: ${{ secrets.COOLPUSH_SKEY }}
+          CUSTOM_WEBHOOK: ${{ secrets.CUSTOM_WEBHOOK }}
+        run: |
+          # 运行同目录下的 push_results.py
+          python push_results.py "${{ steps.merge.outputs.filename }}"
+
+      - name: '清理所有批次的临时 Artifacts'
+        uses: geekyeggo/delete-artifact@v6
+        with:
+          name: batch-*-account.txt
+          failOnError: false

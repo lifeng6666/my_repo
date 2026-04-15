@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>阿里云验证码 2.0</title>
+    <style>
+        :root {
+            --primary-color: #1677ff;
+            --error-color: #ff4d4f;
+            --bg-color: #f0f2f5;
+            --card-bg: #ffffff;
+            --text-secondary: #666;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: var(--bg-color);
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .card {
+            background: var(--card-bg);
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            text-align: center;
+            max-width: 420px;
+            width: 100%;
+            transition: all 0.3s ease;
+        }
+
+        h1 {
+            margin-top: 0;
+            font-size: 20px;
+            color: #333;
+            margin-bottom: 24px;
+        }
+
+        .btn {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 10px 24px;
+            font-size: 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.3s;
+            outline: none;
+            width: 100%;
+            margin-bottom: 10px;
+        }
+
+        .btn:hover {
+            background-color: #4096ff;
+        }
+
+        #captcha-element {
+            margin: 0 auto;
+            min-width: 300px; 
+            min-height: 42px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .error-msg {
+            color: #333;
+            background: #fff;
+            text-align: left;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .error-title {
+            color: var(--error-color);
+            font-weight: bold;
+            font-size: 16px;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .param-list {
+            margin: 10px 0;
+            padding-left: 20px;
+            color: var(--text-secondary);
+        }
+
+        .code-block {
+            background: #f6f6f6;
+            padding: 10px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 12px;
+            color: #333;
+            margin-top: 12px;
+            display: block;
+            word-break: break-all;
+            border: 1px solid #eee;
+        }
+
+        .status-log {
+            margin-top: 20px;
+            font-size: 12px;
+            color: #999;
+            min-height: 20px;
+        }
+
+        /* 结果展示区域样式 */
+        #result-container {
+            margin-top: 20px;
+            border-top: 1px solid #eee;
+            padding-top: 20px;
+            text-align: left;
+            animation: fadeIn 0.5s;
+        }
+        
+        #verify-param {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+            border: 1px solid #d9d9d9;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 12px;
+            resize: vertical;
+            background-color: #fafafa;
+            color: #555;
+            margin-bottom: 10px;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="card" id="main-card">
+        <h1 id="page-title">阿里V3验证码</h1>
+        
+        <div id="error-box" style="display: none;" class="error-msg"></div>
+
+        <button id="captcha-button" class="btn" style="display: none;">点击进行验证</button>
+
+        <div id="captcha-element"></div>
+
+        <div class="status-log" id="status-log">等待初始化...</div>
+
+        <!-- 结果展示区域 (默认隐藏) -->
+        <div id="result-container" style="display: none;">
+            <div style="font-weight: bold; margin-bottom: 5px; color: #333;">验证结果:</div>
+            <!-- Selenium 可直接通过 id="verify-param" 获取 value -->
+            <textarea id="verify-param" rows="5" readonly placeholder="等待结果..."></textarea>
+            <button id="manual-copy-btn" class="btn" style="background-color: #52c41a;">点击复制结果</button>
+        </div>
+    </div>
+</div>
+<script>
+    (function() {
+        const params = new URLSearchParams(window.location.search);
+        
+        // --- 参数配置 ---
+        const prefix = params.get('prefix');
+        const sceneId = params.get('SceneId') || params.get('sceneId'); 
+        const mode = params.get('mode') === 'popup' ? 'popup' : 'embed'; 
+        const region = params.get('region') || 'cn'; 
+        
+        // 自动模式解析: 'true' (无拦截) | 'intercept' (自动滑+拦截) | null
+        const autoParam = params.get('auto');
+        const autoMode = autoParam === 'intercept' ? 'intercept' : (autoParam === 'true' ? 'true' : null);
+        
+        // 手动拦截模式: 'true' (手动滑+拦截)
+        // 只要 autoMode='intercept' 或者 intercept='true'，都需要开启 XHR 拦截
+        const manualIntercept = params.get('intercept') === 'true';
+        let shouldIntercept = (autoMode === 'intercept') || manualIntercept;
+
+        // 是否执行自动脚本：只有当 auto 参数存在，且不是纯手动拦截模式时执行
+        // 如果同时设定了 auto=intercept 和 intercept=true，优先按 auto 处理（即自动滑）
+        // 如果只有 intercept=true，则不自动滑
+        const auto = !!autoMode; 
+
+        // ---  辅助功能：冻结页面 ---
+        // 用于在 auto=intercept 或 intercept=true 模式下，成功获取参数后彻底暂停页面
+        function freezePage() {
+            // 延迟极短时间确保 DOM 更新任务进入队列
+            setTimeout(() => {
+                console.log('❄️ [Freeze] 正在执行页面冻结，防止滑块重置...');
+                
+                // 1. 阻断后续所有网络请求
+                const noop = () => { console.warn('🚫 [Frozen] 网络请求已被冻结拦截'); };
+                XMLHttpRequest.prototype.send = noop;
+                XMLHttpRequest.prototype.open = noop;
+                window.fetch = () => new Promise(() => {}); // 永远挂起
+
+                // 2. 清除所有定时器 (核心：防止 SDK 内部的倒计时或超时逻辑触发重置)
+                // 获取当前一个较大的定时器ID，然后向前遍历清除
+                const endId = setTimeout(() => {}, 0);
+                for (let i = 0; i <= endId; i++) {
+                    clearTimeout(i);
+                    clearInterval(i);
+                }
+                console.log('✅ [Freeze] 页面已完全冻结，状态已锁定');
+            }, 10);
+        }
+
+        // --- 1. 网络拦截层 (启用拦截模式时生效) ---
+        if (shouldIntercept) {
+            console.log("🔥 [Intercept] 请求拦截模式已开启...");
+            if (manualIntercept && !auto) {
+                console.log("ℹ️ [Mode] 当前为：手动滑动 + 结果拦截");
+            }
+
+            const originalOpen = XMLHttpRequest.prototype.open;
+            const originalSend = XMLHttpRequest.prototype.send;
+
+            XMLHttpRequest.prototype.open = function(method, url) {
+                this._interceptionUrl = url;
+                return originalOpen.apply(this, arguments);
+            };
+
+            XMLHttpRequest.prototype.send = function(body) {
+                // 拦截条件：开启拦截 + 目标URL匹配 + 包含参数
+                // 确保拦截逻辑只在 shouldIntercept 为真时执行
+                if (shouldIntercept && this._interceptionUrl && 
+                   (this._interceptionUrl.indexOf('captcha-open.aliyuncs.com') !== -1 || this._interceptionUrl.indexOf('VerifyCaptchaV3') !== -1) && 
+                   typeof body === 'string' && body.indexOf('CaptchaVerifyParam') !== -1) {
+                    
+                    console.log('🛑 [Intercept] 捕获到验证发包请求，正在提取数据并阻断...');
+                    
+                    try {
+                        const searchParams = new URLSearchParams(body);
+                        const verifyParam = searchParams.get('CaptchaVerifyParam');
+
+                        if (verifyParam) {
+                            // --- 将结果写入 DOM ---
+                            const resultContainer = document.getElementById('result-container');
+                            const textarea = document.getElementById('verify-param');
+                            const logEl = document.getElementById('status-log');
+                            
+                            // 填充数据
+                            textarea.value = verifyParam;
+                            // 显示容器
+                            resultContainer.style.display = 'block';
+                            
+                            // 更新日志
+                            if (logEl) {
+                                logEl.style.color = 'green';
+                                logEl.innerText = '拦截成功！页面已冻结';
+                            }
+
+                            console.warn('🚫 [Block] 请求已成功被拦截，未发送到服务器。结果已写入 #verify-param');
+                            
+                            // 立即冻结页面
+                            freezePage();
+                            return; // 阻断实际请求发送
+                        }
+                    } catch (e) {
+                        console.error('⚠️ [Error] 解析拦截数据时发生错误:', e);
+                    }
+                }
+                
+                return originalSend.apply(this, arguments);
+            };
+        }
+
+        // --- 手动复制按钮逻辑 ---
+        document.getElementById('manual-copy-btn').addEventListener('click', function() {
+            const textarea = document.getElementById('verify-param');
+            if (!textarea.value) return;
+            
+            textarea.select();
+            textarea.setSelectionRange(0, 99999); // 适配移动端
+            
+            navigator.clipboard.writeText(textarea.value).then(() => {
+                const originalText = this.innerText;
+                this.innerText = '已复制！';
+                this.style.backgroundColor = '#389e0d';
+                setTimeout(() => {
+                    this.innerText = originalText;
+                    this.style.backgroundColor = '#52c41a';
+                }, 2000);
+            }).catch(err => {
+                alert('复制失败，请手动选择文本框内容复制');
+            });
+        });
+
+        // --- 1. UI 元素获取 ---
+        const errorBox = document.getElementById('error-box');
+        const btn = document.getElementById('captcha-button');
+        const log = document.getElementById('status-log');
+        const captchaElem = document.getElementById('captcha-element');
+
+        // --- 2. 参数校验 ---
+        if (!prefix || !sceneId) {
+            let missing = [];
+            if (!prefix) missing.push('prefix');
+            if (!sceneId) missing.push('SceneId');
+            
+            btn.style.display = 'none';
+            captchaElem.style.display = 'none';
+            log.style.display = 'none';
+            document.getElementById('page-title').innerText = '配置说明';
+
+            errorBox.style.display = 'block';
+            errorBox.innerHTML = `
+                <span class="error-title">❌ 初始化失败：缺少必要参数</span>
+                <div>缺少: <strong>${missing.join(', ')}</strong></div>
+                
+                <div style="margin-top:15px; font-weight:bold;">必要参数：</div>
+                <ul class="param-list">
+                    <li>prefix: 身份标 (pid)</li>
+                    <li>SceneId: 场景 ID</li>
+                </ul>
+
+                <div style="font-weight:bold;">可选参数：</div>
+                <ul class="param-list">
+                    <li>mode: 验证码模式
+                        <ul>
+                            <li>embed (默认) - 嵌入在页面中</li>
+                            <li>popup - 点击按钮弹出</li>
+                        </ul>
+                    </li>
+                    <li>region: 服务器区域 (cn / sgp)</li>
+                   <li>intercept: true (手动滑动，但拦截请求并显示参数)</li>
+                    <li>auto: 自动验证模式(PS：小屏幕或小浏览器窗口如415*900通过率会更高)
+                        <ul>
+                            <li>true - 自动滑动，正常提交，返回结果并写入 #verify-param</li>
+                            <li>intercept - 自动滑动，拦截请求，返回请求载荷CaptchaVerifyParam写入 #verify-param并冻结页面</li>
+                        </ul>
+                    </li>
+                </ul>
+
+                <div style="margin-top:10px;">URL 示例：（嘉立创官网登录滑块）</div>
+                <span class="code-block">https://aliv3.sb.top/?prefix=1tbpug&SceneId=6mw4mrmg&auto=intercept</span>
+            `;
+            return;
+        }
+
+        // --- 3. 全局配置 ---
+        window.AliyunCaptchaConfig = {
+            region: region,
+            prefix: prefix
+        };
+
+        // --- 4. UI 模式调整 ---
+        if (mode === 'popup') {
+            btn.style.display = 'block';
+            btn.innerText = '点击进行验证';
+        } else {
+            btn.style.display = 'none';
+        }
+
+        log.innerText = '正在加载资源...';
+
+        // --- 5. 动态加载 SDK ---
+        const script = document.createElement('script');
+        script.src = 'https://o.alicdn.com/captcha-frontend/aliyunCaptcha/AliyunCaptcha.js';
+        script.async = true;
+        
+        script.onload = function() {
+            log.innerText = '资源加载完成，初始化中...';
+            initCaptcha();
+        };
+
+        script.onerror = function() {
+            log.innerText = 'SDK 加载失败';
+            errorBox.style.display = 'block';
+            errorBox.innerHTML = '<span class="error-title">网络错误</span><br>无法加载阿里云验证码 SDK (o.alicdn.com)，请检查网络连接或跨域设置。';
+        };
+
+        document.head.appendChild(script);
+
+        // --- 6. 自动滑块脚本 ---
+        async function runAutoSlide() {
+            console.log("🚀 [Auto] 正在寻找滑块元素...");
+
+            const waitFor = (id, timeout = 5000) => new Promise(resolve => {
+                const start = Date.now();
+                const check = () => {
+                    const el = document.getElementById(id);
+                    if (el && el.offsetParent !== null) return resolve(el);
+                    if (Date.now() - start > timeout) return resolve(null);
+                    requestAnimationFrame(check);
+                };
+                check();
+            });
+
+            // 等待 DOM 元素
+            const slider = await waitFor('aliyunCaptcha-sliding-slider');
+            const wrapper = await waitFor('aliyunCaptcha-sliding-wrapper');
+
+            if (!slider || !wrapper) {
+                console.log("ℹ️ [Auto] 未检测到滑块元素。");
+                return;
+            }
+
+            console.log("✅ [Auto] 检测到滑块，正在滑动...");
+
+            // 模拟事件触发
+            function triggerEvent(el, type, x, y) {
+                const event = new MouseEvent(type, {
+                    bubbles: true, cancelable: true, view: window,
+                    screenX: x, screenY: y, clientX: x, clientY: y,
+                    button: 0, buttons: 1
+                });
+                el.dispatchEvent(event);
+            }
+
+            // --- 核心计算 ---
+            const sliderRect = slider.getBoundingClientRect();
+            const wrapperRect = wrapper.getBoundingClientRect();
+            
+            const startX = sliderRect.left + sliderRect.width / 2;
+            const startY = sliderRect.top + sliderRect.height / 2;
+            
+            // 真实需要滑动的距离
+            const distanceNeeded = wrapperRect.width - sliderRect.width;
+
+            // 1. 过冲：故意滑过头 20-80px
+            const overshoot = 20 + Math.random() * 60; 
+            const endX = startX + distanceNeeded + overshoot;
+
+            // 2. Y轴大幅漂移：允许向上或向下偏移 -50px 到 50px
+            // 模拟手指没有按直，或者鼠标乱飞
+            const yDrift = (Math.random() - 0.5) * 100; 
+            const endY = startY + yDrift;
+
+            // 3. 极速时间：200ms - 500ms
+            const totalDuration = 200 + Math.random() * 300; 
+
+            // --- 开始滑动 ---
+            // 按下
+            triggerEvent(slider, 'mousedown', startX, startY);
+            
+            const startTime = Date.now();
+            
+            // 循环直到时间结束
+            while (true) {
+                const now = Date.now();
+                const elapsed = now - startTime;
+                let progress = elapsed / totalDuration;
+
+                if (progress > 1) progress = 1;
+
+                // 4. 运动曲线：EaseOutQuart (极快起步，后程减速，但不回拉)
+                // 这种曲线更像人手猛地一划
+                const ease = 1 - Math.pow(1 - progress, 4);
+
+                // 计算当前坐标
+                const currentX = startX + (endX - startX) * ease;
+                
+                // Y轴增加随机抖动 (Noise)
+                // 基础漂移 + 高频抖动
+                const currentYDrift = yDrift * ease; // 随进度漂移
+                const jitter = (Math.random() - 0.5) * 6; // 6px 内的高频抖动
+                const currentY = startY + currentYDrift + jitter;
+
+                // 触发移动
+                triggerEvent(slider, 'mousemove', currentX, currentY);
+                // 同时触发 document 上的事件，保证 SDK 捕获
+                triggerEvent(document, 'mousemove', currentX, currentY);
+
+                if (progress >= 1) break;
+
+                // 极短的间隔，模拟浏览器渲染帧
+                // 不使用固定的 await，而是随机 5-10ms
+                await new Promise(r => setTimeout(r, 5 + Math.random() * 5));
+            }
+
+            // --- 结束 ---
+            // 5. 突然松手：不回拉，直接在过冲的位置松开
+            // 只有极短的停顿(0-50ms)，甚至不停顿
+            await new Promise(r => setTimeout(r, Math.random() * 50));
+            
+            triggerEvent(slider, 'mouseup', endX, endY);
+            triggerEvent(document, 'mouseup', endX, endY);
+            
+            console.log(`🖱️ [Auto] 滑动完成: 耗时 ${Math.floor(Date.now() - startTime)}ms, 过冲 ${Math.floor(overshoot)}px`);
+        }
+
+        // --- 7. 初始化逻辑 ---
+        function initCaptcha() {
+            try {
+                window.initAliyunCaptcha({
+                    SceneId: sceneId,
+                    mode: mode, 
+                    element: '#captcha-element', 
+                    button: '#captcha-button', 
+                    
+                    success: function(captchaVerifyParam) {
+                        console.log('Verify Success Callback:', captchaVerifyParam);
+                        
+                        // 1. 自动不拦截模式 (auto=true)：正常提交后获取结果并填入
+                        // 2. 手动不拦截模式 (普通)：正常弹窗
+
+                        if (autoMode === 'true') {
+                             const resultContainer = document.getElementById('result-container');
+                             const textarea = document.getElementById('verify-param');
+                             
+                             let resultStr = '';
+                             if (typeof captchaVerifyParam === 'object' && captchaVerifyParam.captchaVerifyParam) {
+                                 resultStr = captchaVerifyParam.captchaVerifyParam;
+                             } else {
+                                 resultStr = typeof captchaVerifyParam === 'string' ? captchaVerifyParam : JSON.stringify(captchaVerifyParam);
+                             }
+                             
+                             textarea.value = resultStr;
+                             resultContainer.style.display = 'block';
+                             log.innerText = '验证通过！(已自动获取结果)';
+                             log.style.color = 'green';
+                        } else if (!shouldIntercept) {
+                             log.style.color = 'green';
+                             log.innerText = '验证成功！';
+                             alert('验证通过（未拦截验证请求）\n' + JSON.stringify(captchaVerifyParam));
+                        }
+                    },
+                    
+                    getInstance: function(instance) {
+                        window.captcha = instance;
+                        
+                        if (manualIntercept && !auto) {
+                            log.innerText = '⚠️ 请手动滑动验证码 (拦截模式已开启)';
+                        } else {
+                            log.innerText = mode === 'embed' ? '请完成上方验证' : '请点击按钮进行验证';
+                        }
+
+                        // 如果开启了 auto，则执行脚本
+                        if (auto) {
+                            // 等待元素渲染稳定
+                            console.log("⏳ [Auto] 正在准备自动滑动...");
+                            setTimeout(() => {
+                                runAutoSlide();
+                            }, 1000);
+                        }
+                    },
+
+                    onError: function(error) {
+                        console.error('Captcha Error:', error);
+                        log.style.color = 'red';
+                        log.innerText = '错误: ' + (error.msg || error.code);
+                    }
+                });
+            } catch (e) {
+                console.error('Init Error:', e);
+                log.innerText = '初始化代码执行异常';
+            }
+        }
+    })();
+</script>
+
+</body>
+</html>
+
+
