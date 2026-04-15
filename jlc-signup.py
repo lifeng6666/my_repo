@@ -216,7 +216,7 @@ class HaoZhuMa:
             return False
 
 def get_valid_proxy(timeout=None):
-    api_url = "http://api.dmdaili.com/dmgetip.asp?apikey=9a75bb40&pwd=b531ce911e0edacae218ea8ee6a1bff3&getnum=1&httptype=1&geshi=2&fenge=1&fengefu=&operate=all"
+    api_url = "http://api.dmdaili.com/dmgetip.asp?apikey=b8ea786f&pwd=8c2eb32b847f8f930f2e0cf6a08c45de&getnum=1&httptype=1&geshi=2&fenge=1&fengefu=&operate=all"
     start_time = time.time()
     
     while True:
