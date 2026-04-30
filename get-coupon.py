@@ -694,8 +694,8 @@ def claim_3dp_material(driver, coupon_result):
 
 def claim_fpc_coupons(driver, coupon_result):
     """三、FPC新客两张券"""
-    page_url = "https://www.jlc-fpc.com/promotional"
-    api_url = "https://www.jlc-fpc.com/api/fpcPortal/coupon/receiveFpcPromotionActivityCoupon"
+    page_url = "https://jlc-fpc.com/promotional"
+    api_url = "https://jlc-fpc.com/api/fpcPortal/coupon/receiveFpcPromotionActivityCoupon"
 
     coupons = [
         {
