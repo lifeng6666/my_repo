@@ -12,7 +12,7 @@ on:
         description: '统一设置的密码'
         required: true
         type: string
-        default: 'JLCjlc476743'
+        default: 'JLCjlc123123'
       start_email_index:
         description: '邮箱初始递增序号 (未配置默认从1开始)'
         required: true
@@ -26,12 +26,24 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
-      - name: '动态配置矩阵'
+      - name: '检查输入合法性并动态配置矩阵'
         id: set-matrix
         run: |
           TOTAL=${{ github.event.inputs.total_accounts }}
           START_IDX=${{ github.event.inputs.start_email_index }}
           
+          # 1. 校验异常输入
+          if (( TOTAL <= 0 )); then
+            echo "::error::注册账号数量不合法: $TOTAL"
+            exit 1
+          fi
+          
+          if (( TOTAL > 100 )); then
+            echo "::error::注册数量大于100，易封控，请减少注册数量或分多个工作流运行"
+            exit 1
+          fi
+
+          # 2. 动态计算批次 (单次最多20个，最大5批)
           JSON="["
           REMAINING=$TOTAL
           CURRENT_IDX=$START_IDX
@@ -91,7 +103,7 @@ jobs:
       - name: '安装依赖'
         run: |
           pip install --upgrade pip
-          pip install requests==2.26.0 selenium==3.141.0 PyExecJS DrissionPage
+          pip install requests==2.26.0 selenium==3.141.0 lxml==4.6.5 retrying==1.3.3 wheel==0.37.1 PyExecJS DrissionPage psutil
 
       - name: '准备Chrome驱动'
         uses: nanasess/setup-chromedriver@v2
@@ -102,9 +114,11 @@ jobs:
           sudo apt-get install -y xvfb
 
           Xvfb :99 -screen 0 1024x768x24 &
-          echo "DISPLAY=:99" >> $GITHUB_ENV          
+          echo "DISPLAY=:99" >> $GITHUB_ENV
 
       - name: '运行注册脚本 (批次 ${{ matrix.batch_info.batch }})'
+        env:
+          DISPLAY: ':99'
         run: |
           # 传入动态计算好的 数量、密码、递增序号
           python -u jlc-signup.py ${{ matrix.batch_info.count }} '${{ github.event.inputs.password }}' ${{ matrix.batch_info.start_idx }}
@@ -122,7 +136,7 @@ jobs:
           path: batch-${{ matrix.batch_info.batch }}-account.txt
           archive: false
           if-no-files-found: ignore
-          retention-days: 2
+          retention-days: 14
 
 # Job 3: 汇总与清理阶段
   merge_and_clean:
@@ -165,7 +179,7 @@ jobs:
           path: ${{ steps.merge.outputs.filename }}
           archive: false
           if-no-files-found: ignore
-          retention-days: 7
+          retention-days: 14
 
       - name: '设置Python环境用于推送'
         if: steps.merge.outputs.has_data == 'true'
