@@ -15,15 +15,9 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, WebDriverException, NoSuchElementException
+from selenium.common.exceptions import TimeoutException
+from Utils import pwdEncrypt
 
-# 导入SM2加密方法
-try:
-    from Utils import pwdEncrypt
-    print("✅ 成功加载 SM2 加密依赖")
-except ImportError:
-    print("❌ 错误: 未找到 Utils.py ，请确保同目录下存在该文件")
-    sys.exit(1)
 
 
 def log(msg, show_time=True):
@@ -218,7 +212,7 @@ def send_post_request(driver, url, body_dict, extra_headers=None):
 #  登录流程
 # =====================================================================
 
-def call_aliv3min_with_timeout(timeout_seconds=180, max_retries=18):
+def call_aliv3_with_timeout(timeout_seconds=180, max_retries=18):
     """调用 AliV3-login.py 获取 captchaTicket"""
     for attempt in range(max_retries):
         log(f"📞 正在调用 登录脚本 获取 captchaTicket (尝试 {attempt + 1}/{max_retries})...")
@@ -393,7 +387,7 @@ def perform_login_flow(driver, username, password, max_retries=3):
 
             session_fail_count = 0
 
-            captcha_ticket = call_aliv3min_with_timeout()
+            captcha_ticket = call_aliv3_with_timeout()
             if not captcha_ticket: raise Exception("获取 CaptchaTicket 失败")
 
             status, login_res = login_with_password(driver, username, password, captcha_ticket)
@@ -743,7 +737,7 @@ def main():
     all_results = []
 
     for i, (u, p) in enumerate(zip(usernames, passwords), 1):
-        log(f"\n{'='*50}", show_time=False)
+        log(f"{'='*50}", show_time=False)
         log(f"🚀 正在处理账号 {i}/{len(usernames)}", show_time=False)
         log(f"{'='*50}", show_time=False)
         res = process_single_account(u, p, i, skip_steps)
@@ -753,14 +747,14 @@ def main():
             time.sleep(5)
 
     # ===================== 汇总输出 =====================
-    log(f"\n{'='*50}", show_time=False)
+    log(f"{'='*50}", show_time=False)
     log("📊 执行结果总结", show_time=False)
     log(f"{'='*50}", show_time=False)
 
     for i, r in enumerate(all_results):
         if i > 0:
             log(f"{'='*50}", show_time=False)
-        log(f"\n账号{r['index']}({r['username']})", show_time=False)
+        log(f"账号{r['index']}({r['username']})", show_time=False)
         
         # 阶段1
         if 1 not in skip_steps and r['s1']:
@@ -833,7 +827,7 @@ def main():
             else:
                 log("微信绑定情况:❌读取失败", show_time=False)
 
-    log(f"\n{'='*50}", show_time=False)
+    log(f"{'='*50}", show_time=False)
     sys.exit(0)
 
 
