@@ -16,7 +16,6 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
-
 from Utils import pwdEncrypt
 
 
@@ -29,6 +28,7 @@ def log(msg, show_time=True):
         full_msg = msg
     print(full_msg, flush=True)
 
+
 def is_on_3dp_site(url):
     """检查 URL 的域名是否为 jlc-3dp"""
     try:
@@ -37,9 +37,11 @@ def is_on_3dp_site(url):
     except:
         return False
 
+
 # =====================================================================
 #  浏览器创建
 # =====================================================================
+
 def create_chrome_driver(user_data_dir=None):
     """创建Chrome浏览器实例"""
     chrome_options = Options()
@@ -81,11 +83,12 @@ def create_chrome_driver(user_data_dir=None):
 
     return driver
 
+
 # =====================================================================
 #  登录流程
 # =====================================================================
-def call_aliv3_with_timeout(timeout_seconds=180, max_retries=10):
-    """调用 AliV3-login.py 获取 captchaTicket - 最多重试10次"""
+def call_aliv3_with_timeout(timeout_seconds=180, max_retries=18):
+    """调用 AliV3-login.py 获取 captchaTicket - 最多重试18次"""
     for attempt in range(max_retries):
         log(f"📞 正在调用 登录脚本 获取 captchaTicket (尝试 {attempt + 1}/{max_retries})...")
 
@@ -253,6 +256,7 @@ def send_request_via_browser(driver, url, method='POST', body=None):
         log(f"❌ 浏览器请求执行失败: {e}")
         return None
 
+
 def perform_init_session(driver, max_retries=3):
     """执行 Session 初始化"""
     for i in range(max_retries):
@@ -266,6 +270,7 @@ def perform_init_session(driver, max_retries=3):
                 log(f"⚠ 初始化会话失败，等待2秒后重试...")
                 time.sleep(2)
     return False
+
 
 def login_with_password(driver, username, password, captcha_ticket):
     """登录"""
@@ -285,6 +290,7 @@ def login_with_password(driver, username, password, captcha_ticket):
     if response.get('success') == True and response.get('code') == 2017: return 'success', response
     if response.get('code') == 10208: return 'password_error', response
     return 'other_error', response
+
 
 def verify_login_on_member_page(driver, max_retries=3):
     """验证登录"""
@@ -309,6 +315,7 @@ def verify_login_on_member_page(driver, max_retries=3):
             log(f"⏳ 等待2秒后重试...")
             time.sleep(2)
     return False
+
 
 def perform_login_flow(driver, username, password, max_retries=3):
     """执行完整的登录流程（包括Session初始化、登录、验证）"""
@@ -362,9 +369,11 @@ def perform_login_flow(driver, username, password, max_retries=3):
 
     return 'login_failed'
 
+
 # =====================================================================
 #  领券专用函数
 # =====================================================================
+
 def extract_secretkey_from_logs(driver):
     """从浏览器性能日志中提取任意请求标头里的 Secretkey"""
     try:
@@ -392,6 +401,7 @@ def extract_secretkey_from_logs(driver):
     except Exception as e:
         log(f"⚠ 读取性能日志异常: {e}")
     return None
+
 
 def send_coupon_request(driver, url, body_str, content_type='application/json', secret_key=None):
     """通过浏览器在当前页面上下文中发送领券 POST 请求，自动附加 XSRF-TOKEN"""
@@ -447,6 +457,7 @@ def send_coupon_request(driver, url, body_str, content_type='application/json', 
         log(f"❌ 发送领券请求失败: {e}")
         return None
 
+
 def open_page_and_wait_sso(driver, url):
     """打开页面并等待 10 秒获取 SSO 登录状态"""
     log(f"🔗 打开页面: {url.split('?')[0]}...")
@@ -461,6 +472,7 @@ def open_page_and_wait_sso(driver, url):
     log("⏳ 等待10秒获取SSO登录状态...")
     time.sleep(10)
 
+
 def refresh_page_and_wait(driver):
     """刷新当前页面并等待 10 秒"""
     try:
@@ -472,12 +484,14 @@ def refresh_page_and_wait(driver):
             pass
     time.sleep(10)
 
+
 def clear_performance_logs(driver):
     """清空已有的性能日志"""
     try:
         driver.get_log('performance')
     except:
         pass
+
 
 def navigate_3dp_via_passport(driver):
 
@@ -555,9 +569,11 @@ def navigate_3dp_via_passport(driver):
     log("⏳ 等待页面资源加载 (10s)...")
     time.sleep(10)
 
+
 # =====================================================================
 #  三张券的领取逻辑
 # =====================================================================
+
 def claim_3dp_30_20(driver, coupon_result):
     """一、3D打印30-20券"""
     coupon_name = "3D打印30-20券"
@@ -602,25 +618,23 @@ def claim_3dp_30_20(driver, coupon_result):
         code = response.get('code')
         message = response.get('message') or ''
 
-        # 领取成功
         if success == True and code == 200:
             log(f"✅ {coupon_name}领取成功")
             coupon_result[coupon_name] = {'success': True}
             return
 
-        # 已领取 / 超出限额 —— 不重试
         if success == False and code == 500:
             if '已领取' in message or '最多可领券' in message:
                 log(f"⚠ {coupon_name}: {message}")
                 coupon_result[coupon_name] = {'success': False, 'reason': message}
                 return
 
-        # 其他情况 —— 重试
         log(f"⚠ 未预期的响应: {json.dumps(response, ensure_ascii=False)[:200]}")
         last_message = message or json.dumps(response, ensure_ascii=False)[:100]
 
     log(f"❌ {coupon_name}领取失败（已达最大重试次数）")
     coupon_result[coupon_name] = {'success': False, 'reason': last_message or '重试后仍失败'}
+
 
 def claim_3dp_material(driver, coupon_result):
     """二、3D打印高值材料券"""
@@ -665,32 +679,29 @@ def claim_3dp_material(driver, coupon_result):
         code = response.get('code')
         message = response.get('message') or ''
 
-        # 领取成功
         if success == True and code == 200:
             log(f"✅ {coupon_name}领取成功")
             coupon_result[coupon_name] = {'success': True}
             return
 
-        # 已领取 —— 不重试
         if success == False and code == 10003:
             reason = "当前账号已经领取过免费券"
             log(f"⚠ {coupon_name}: {reason}")
             coupon_result[coupon_name] = {'success': False, 'reason': reason}
             return
 
-        # 未绑定微信，不重试
         if success == False and code == 10002:
             reason = "当前账号未绑定微信无法领券"
             log(f"⚠ {coupon_name}: {reason}")
             coupon_result[coupon_name] = {'success': False, 'reason': reason}
             return
 
-        # 其他情况 —— 重试
         log(f"⚠ 未预期的响应: {json.dumps(response, ensure_ascii=False)[:200]}")
         last_message = message or json.dumps(response, ensure_ascii=False)[:100]
 
     log(f"❌ {coupon_name}领取失败（已达最大重试次数）")
     coupon_result[coupon_name] = {'success': False, 'reason': last_message or '重试后仍失败'}
+
 
 def claim_fpc_coupons(driver, coupon_result):
     """三、FPC新客两张券"""
@@ -747,14 +758,12 @@ def claim_fpc_coupons(driver, coupon_result):
             code = response.get('code')
             message = response.get('message') or ''
 
-            # 领取成功
             if success == True and code == 200:
                 log(f"✅ {coupon_name}领取成功")
                 coupon_result[coupon_name] = {'success': True}
                 claimed = True
                 break
 
-            # 已领取 —— 不重试
             if success == False and code == 207:
                 reason = "当前账号已经领取过"
                 log(f"⚠ {coupon_name}: {reason}")
@@ -762,7 +771,6 @@ def claim_fpc_coupons(driver, coupon_result):
                 claimed = True
                 break
 
-            # 其他情况 —— 重试
             log(f"⚠ 未预期的响应: {json.dumps(response, ensure_ascii=False)[:200]}")
             last_message = message or json.dumps(response, ensure_ascii=False)[:100]
 
@@ -770,9 +778,11 @@ def claim_fpc_coupons(driver, coupon_result):
             log(f"❌ {coupon_name}领取失败（已达最大重试次数）")
             coupon_result[coupon_name] = {'success': False, 'reason': last_message or '重试后仍失败'}
 
+
 # =====================================================================
 #  单账号处理 & 主函数
 # =====================================================================
+
 def process_single_account(username, password, account_index, total_accounts):
     """处理单个账号的完整领券流程"""
     coupon_names_ordered = [
@@ -846,6 +856,7 @@ def process_single_account(username, password, account_index, total_accounts):
 
     return {'username': username, 'index': account_index, 'coupons': coupon_result}
 
+
 def main():
     if len(sys.argv) < 3:
         print("用法: python lingquan.py 账号1,账号2... 密码1,密码2...")
@@ -896,6 +907,7 @@ def main():
 
     log(f"{'='*50}", show_time=False)
     sys.exit(0)
+
 
 if __name__ == "__main__":
     main()

@@ -86,7 +86,7 @@ def cleanup_zombie_chrome():
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             continue
 
-def create_chrome_driver(profile_dir, proxy_str=None, disable_images=False):
+def create_chrome_driver(profile_dir, proxy_str=None, disable_images=True):
     options = Options()
     options.page_load_strategy = 'eager'
     options.add_argument(f"--user-data-dir={profile_dir}")
@@ -246,8 +246,23 @@ def get_valid_proxy(timeout=None):
                     if test_resp.status_code == 200:
                         log("✅ 代理测试成功，延迟正常")
                         return proxy_str
-                except Exception:
-                    log("⚠ 代理测试超时或失败，重新获取...")
+                    else:
+                        log(f"⚠ 代理测试失败，返回状态码: {test_resp.status_code}，重新获取...")
+                        continue
+                except requests.exceptions.ConnectTimeout:
+                    log("⚠ 代理测试连接超时，重新获取...")
+                    continue
+                except requests.exceptions.ReadTimeout:
+                    log("⚠ 代理测试读取超时，重新获取...")
+                    continue
+                except requests.exceptions.ProxyError as e:
+                    log(f"⚠ 代理拒绝连接或代理错误 ({e})，重新获取...")
+                    continue
+                except requests.exceptions.ConnectionError as e:
+                    log(f"⚠ 代理连接失败 ({e})，重新获取...")
+                    continue
+                except Exception as e:
+                    log(f"⚠ 代理测试未知错误 ({type(e).__name__}: {e})，重新获取...")
                     continue
             else:
                 log(f"❌ 代理API返回异常内容: {data}")
@@ -606,7 +621,7 @@ def register_account(hzm, config, email_index, fixed_password):
 
     try:
         proxy_str = None 
-        driver = create_chrome_driver(create_new_profile_dir(), proxy_str, disable_images=False)
+        driver = create_chrome_driver(create_new_profile_dir(), proxy_str, disable_images=True)
 
         phone = None
         sms_code = None
@@ -663,8 +678,8 @@ def register_account(hzm, config, email_index, fixed_password):
             pass
         
         proxy_success = False
-        for proxy_attempt in range(3):
-            log(f"🔗 开始获取代理并重建环境 (尝试 {proxy_attempt+1}/3)...")
+        for proxy_attempt in range(10):
+            log(f"🔗 开始获取代理并重建环境 (尝试 {proxy_attempt+1}/10)...")
             proxy_str = get_valid_proxy(timeout=300)
             if not proxy_str:
                 log("⚠ 获取新代理超时或失败。")
@@ -711,7 +726,7 @@ def register_account(hzm, config, email_index, fixed_password):
                 
         if not proxy_success:
             hzm.release_phone(phone)
-            raise Exception("连续 3 次获取代理并重建浏览器环境失败，放弃当前任务，重新开始注册")
+            raise Exception("连续 10 次获取代理并重建浏览器环境失败，放弃当前任务，重新开始注册")
             
         driver.set_page_load_timeout(20)
         time.sleep(random.uniform(1.5, 2.5))
@@ -780,7 +795,7 @@ def register_account(hzm, config, email_index, fixed_password):
         except: pass
         time.sleep(2)
 
-        driver = create_chrome_driver(create_new_profile_dir(), proxy_str=None, disable_images=False)
+        driver = create_chrome_driver(create_new_profile_dir(), proxy_str=None, disable_images=True)
         
         log("🌐 浏览器已启动，准备执行新注册账号登录流程...")
         login_success = False
@@ -917,7 +932,7 @@ def register_account(hzm, config, email_index, fixed_password):
                 t_stamp = int(time.time() * 1000)
                 dp_fetch(driver, f"https://member.jlc.com/api/integrated/customer/type/sendSmsNew?source=JLC&_t={t_stamp}", "GET", extra_headers=extra_headers)
                 
-                dp_fetch(driver, "https://member.jlc.com/api/integrated/customerInvoiceInfo/group/showMergeData", "POST", extra_headers=extra_headers)
+                r_merge = dp_fetch(driver, "https://member.jlc.com/api/integrated/customerInvoiceInfo/group/showMergeData", "POST", extra_headers=extra_headers)
                 
                 sms_code2 = hzm.get_message(phone)
                 if not sms_code2:
@@ -952,7 +967,7 @@ def register_account(hzm, config, email_index, fixed_password):
                     log("❌ 超过最大重试，跳过归属设置")
 
         log("🌐 开始绑定邮箱...")
-        for attempt in range(5):
+        for attempt in range(3):
             try:
                 safe_get_page(driver, "https://passport.jlc.com/set-email")
                 time.sleep(3)
@@ -1008,7 +1023,7 @@ def register_account(hzm, config, email_index, fixed_password):
                     raise Exception(f"邮箱最终绑定请求失败: {r_ce}")
             except Exception as e:
                 log(f"⚠ 绑定邮箱第 {attempt+1} 次尝试失败: {e}")
-                if attempt == 4:
+                if attempt == 2:
                     log("❌ 超过最大重试，绑定邮箱失败")
                     account_info["email"] = "未绑定"
 
