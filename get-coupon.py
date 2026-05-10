@@ -46,14 +46,12 @@ def create_chrome_driver(user_data_dir=None):
     """创建Chrome浏览器实例"""
     chrome_options = Options()
 
-    # --- 防检测核心配置 ---
     chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_experimental_option('useAutomationExtension', False)
 
-    # --- 稳定性配置 ---
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
@@ -61,7 +59,6 @@ def create_chrome_driver(user_data_dir=None):
     chrome_options.add_argument("--disable-extensions")
     chrome_options.add_argument("--window-size=1920,1080")
 
-    # --- 启用性能日志，用于捕获网络请求头中的 Secretkey ---
     chrome_options.set_capability('goog:loggingPrefs', {'performance': 'ALL'})
 
     if user_data_dir:
@@ -72,7 +69,6 @@ def create_chrome_driver(user_data_dir=None):
     driver.set_page_load_timeout(60)
     driver.set_script_timeout(60)
 
-    # --- CDP 命令防检测 ---
     driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
         "source": """
             Object.defineProperty(navigator, 'webdriver', {
@@ -87,6 +83,7 @@ def create_chrome_driver(user_data_dir=None):
 # =====================================================================
 #  登录流程
 # =====================================================================
+
 def call_aliv3_with_timeout(timeout_seconds=180, max_retries=18):
     """调用 AliV3-login.py 获取 captchaTicket - 最多重试18次"""
     for attempt in range(max_retries):
@@ -571,7 +568,7 @@ def navigate_3dp_via_passport(driver):
 
 
 # =====================================================================
-#  三张券的领取逻辑
+#  优惠券领取逻辑
 # =====================================================================
 
 def claim_3dp_30_20(driver, coupon_result):
@@ -623,14 +620,11 @@ def claim_3dp_30_20(driver, coupon_result):
             coupon_result[coupon_name] = {'success': True}
             return
 
-        if success == False and code == 500:
-            if '已领取' in message or '最多可领券' in message:
-                log(f"⚠ {coupon_name}: {message}")
-                coupon_result[coupon_name] = {'success': False, 'reason': message}
-                return
-
-        log(f"⚠ 未预期的响应: {json.dumps(response, ensure_ascii=False)[:200]}")
-        last_message = message or json.dumps(response, ensure_ascii=False)[:100]
+        # 只要接口有返回业务响应结果但不是领取成功，就不需要再盲目重试，直接跳过并记录失败原因
+        reason = message if message else json.dumps(response, ensure_ascii=False)[:100]
+        log(f"⚠ {coupon_name}: {reason}")
+        coupon_result[coupon_name] = {'success': False, 'reason': reason}
+        return
 
     log(f"❌ {coupon_name}领取失败（已达最大重试次数）")
     coupon_result[coupon_name] = {'success': False, 'reason': last_message or '重试后仍失败'}
@@ -684,27 +678,141 @@ def claim_3dp_material(driver, coupon_result):
             coupon_result[coupon_name] = {'success': True}
             return
 
-        if success == False and code == 10003:
+        if code == 10003:
             reason = "当前账号已经领取过免费券"
-            log(f"⚠ {coupon_name}: {reason}")
-            coupon_result[coupon_name] = {'success': False, 'reason': reason}
-            return
-
-        if success == False and code == 10002:
+        elif code == 10002:
             reason = "当前账号未绑定微信无法领券"
-            log(f"⚠ {coupon_name}: {reason}")
-            coupon_result[coupon_name] = {'success': False, 'reason': reason}
-            return
-
-        log(f"⚠ 未预期的响应: {json.dumps(response, ensure_ascii=False)[:200]}")
-        last_message = message or json.dumps(response, ensure_ascii=False)[:100]
+        else:
+            reason = message if message else json.dumps(response, ensure_ascii=False)[:100]
+            
+        log(f"⚠ {coupon_name}: {reason}")
+        coupon_result[coupon_name] = {'success': False, 'reason': reason}
+        return
 
     log(f"❌ {coupon_name}领取失败（已达最大重试次数）")
     coupon_result[coupon_name] = {'success': False, 'reason': last_message or '重试后仍失败'}
 
 
-def claim_fpc_coupons(driver, coupon_result):
-    """三、FPC新客两张券"""
+def claim_invite_coupon(driver, coupon_result, invite_link):
+    """三、邀请免运优惠券"""
+    coupon_name = "邀请免运优惠券"
+    
+    if not invite_link:
+        coupon_result[coupon_name] = {'success': False, 'reason': '未填写邀请链接，跳过'}
+        return
+        
+    log(f"🎫 === 开始领取{coupon_name} ===")
+
+    try:
+        # 兼容 ?shareid=xxx 和 /ia/xxx 两种链接格式
+        match = re.search(r'(?:shareid=|/ia/)([a-zA-Z0-9]+)', invite_link)
+        if match:
+            invitation_code = match.group(1)
+        else:
+            reason = '无法从链接解析到邀请码(shareid)'
+            log(f"⚠ {reason}")
+            coupon_result[coupon_name] = {'success': False, 'reason': reason}
+            return
+    except Exception as e:
+        reason = f'链接解析失败: {e}'
+        log(f"⚠ {reason}")
+        coupon_result[coupon_name] = {'success': False, 'reason': reason}
+        return
+
+    clear_performance_logs(driver)
+    open_page_and_wait_sso(driver, invite_link)
+    secret_key = extract_secretkey_from_logs(driver)
+
+    if secret_key:
+        log(f"✅ 成功获取 Secretkey")
+    else:
+        log(f"⚠ 未获取到 Secretkey，仍将尝试发包...")
+
+    get_id_url = "https://www.jlc-3dp.cn/3dp/coupon/getReceiveCouponId"
+    get_id_body = json.dumps({"operationPromotionEnum": "USER_INVITATION_COUPON_2025_12"})
+    
+    bind_url = "https://www.jlc-3dp.cn/3dp/UserInvitationWebController/bindUserInvitationRelation"
+    bind_body = json.dumps({"invitationCode": invitation_code})
+    
+    receive_url = "https://www.jlc-3dp.cn/3dp/coupon/receiveCouponsV2"
+    valid_url = "https://www.jlc-3dp.cn/3dp/coupon/validCouponsV2"
+
+    last_message = None
+
+    for attempt in range(3):
+        if attempt > 0:
+            log(f"⏳ 刷新页面等待10秒后第 {attempt + 1} 次重试...")
+            clear_performance_logs(driver)
+            refresh_page_and_wait(driver)
+            new_key = extract_secretkey_from_logs(driver)
+            if new_key:
+                secret_key = new_key
+                log(f"✅ 重新获取 Secretkey 成功")
+
+        coupon_id = "F96CC77EEA8F0B44B0025D239F5B53C95234A354331DD132"
+        all_ids =["790E9905E481E72105C3C61B760EC846F9AF0FFB675570D4", coupon_id]
+        
+        # 1. 获取券ID
+        id_res = send_coupon_request(driver, get_id_url, get_id_body, 'application/json', secret_key)
+        if id_res and id_res.get('success') and id_res.get('data') and len(id_res.get('data')) >= 2:
+            all_ids = id_res['data']
+            coupon_id = all_ids[1]
+
+        # 2. 绑定邀请关系
+        send_coupon_request(driver, bind_url, bind_body, 'application/json', secret_key)
+
+        # 3. 领券
+        receive_body = json.dumps({
+            "operationPromotionEnum": "USER_INVITATION_COUPON_2025_12",
+            "couponIdList": [coupon_id],
+            "redemptionParamVO": {"invitationCode": invitation_code}
+        })
+        response = send_coupon_request(driver, receive_url, receive_body, 'application/json', secret_key)
+
+        if response is None or '_fetch_error' in response:
+            err = response.get('_fetch_error', '请求失败') if response else '请求失败'
+            log(f"⚠ 请求异常: {err}")
+            last_message = err
+            continue
+
+        success = response.get('success')
+        code = response.get('code')
+        message = response.get('message') or ''
+
+        if success == True and code == 200:
+            success_msg = "邀请免运优惠券领取成功，已绑定邀请账号"
+            log(f"✅ {success_msg}")
+            coupon_result[coupon_name] = {'success': True, 'reason': success_msg}
+            return
+
+        # 4. 若未成功，通过 validCouponsV2 获取具体状态
+        valid_body = json.dumps({
+            "operationPromotionEnum": "USER_INVITATION_COUPON_2025_12",
+            "couponIdList": all_ids,
+            "redemptionParamVO": {"invitationCode": invitation_code}
+        })
+        valid_res = send_coupon_request(driver, valid_url, valid_body, 'application/json', secret_key)
+        if valid_res and valid_res.get('success') and valid_res.get('data'):
+            receive_msg = valid_res['data'].get('receiveMessage')
+            if receive_msg:
+                log(f"⚠ {coupon_name}: {receive_msg}")
+                coupon_result[coupon_name] = {'success': False, 'reason': receive_msg}
+                return
+
+        reason = message if message else json.dumps(response, ensure_ascii=False)[:100]
+        log(f"⚠ {coupon_name}: {reason}")
+        coupon_result[coupon_name] = {'success': False, 'reason': reason}
+        return
+
+    log(f"❌ {coupon_name}领取失败（已达最大重试次数）")
+    coupon_result[coupon_name] = {'success': False, 'reason': last_message or '重试后仍失败'}
+
+
+def claim_fpc_coupons(driver, coupon_result, skip_coupons_list=None):
+    if skip_coupons_list is None:
+        skip_coupons_list =[]
+        
+    """四、FPC新客两张券"""
     page_url = "https://jlc-fpc.com/promotional"
     api_url = "https://jlc-fpc.com/api/fpcPortal/coupon/receiveFpcPromotionActivityCoupon"
 
@@ -731,7 +839,7 @@ def claim_fpc_coupons(driver, coupon_result):
     for coupon_info in coupons:
         coupon_name = coupon_info['name']
         
-        if coupon_result.get(coupon_name, {}).get('success'):
+        if coupon_result.get(coupon_name, {}).get('success') or coupon_name in skip_coupons_list:
             continue
             
         body = coupon_info['body']
@@ -764,15 +872,15 @@ def claim_fpc_coupons(driver, coupon_result):
                 claimed = True
                 break
 
-            if success == False and code == 207:
+            if code == 207:
                 reason = "当前账号已经领取过"
-                log(f"⚠ {coupon_name}: {reason}")
-                coupon_result[coupon_name] = {'success': False, 'reason': reason}
-                claimed = True
-                break
-
-            log(f"⚠ 未预期的响应: {json.dumps(response, ensure_ascii=False)[:200]}")
-            last_message = message or json.dumps(response, ensure_ascii=False)[:100]
+            else:
+                reason = message if message else json.dumps(response, ensure_ascii=False)[:100]
+                
+            log(f"⚠ {coupon_name}: {reason}")
+            coupon_result[coupon_name] = {'success': False, 'reason': reason}
+            claimed = True
+            break
 
         if not claimed:
             log(f"❌ {coupon_name}领取失败（已达最大重试次数）")
@@ -783,17 +891,24 @@ def claim_fpc_coupons(driver, coupon_result):
 #  单账号处理 & 主函数
 # =====================================================================
 
-def process_single_account(username, password, account_index, total_accounts):
+def process_single_account(username, password, account_index, total_accounts, invite_link="", skip_coupons_list=None):
+    if skip_coupons_list is None:
+        skip_coupons_list = []
+        
     """处理单个账号的完整领券流程"""
     coupon_names_ordered = [
         "3D打印30-20券",
         "3D打印高值材料券",
+        "邀请免运优惠券",
         "FPC新客免费打样券",
         "FPC 100元优惠券"
     ]
     coupon_result = {}
     for name in coupon_names_ordered:
-        coupon_result[name] = {'success': False, 'reason': '未执行'}
+        if name in skip_coupons_list:
+            coupon_result[name] = {'success': False, 'reason': '手动选择跳过'}
+        else:
+            coupon_result[name] = {'success': False, 'reason': '未执行'}
 
     max_account_retries = 3
 
@@ -822,27 +937,33 @@ def process_single_account(username, password, account_index, total_accounts):
             if login_status != 'success':
                 raise Exception("登录流程失败")
 
-            # ====== 阶段 2: 依次领取三组券 ======
-            if not coupon_result["3D打印30-20券"].get('success'):
+            # ====== 阶段 2: 依次领取各组券 ======
+            if not coupon_result["3D打印30-20券"].get('success') and "3D打印30-20券" not in skip_coupons_list:
                 claim_3dp_30_20(driver, coupon_result)
                 
-            if not coupon_result["3D打印高值材料券"].get('success'):
+            if not coupon_result["3D打印高值材料券"].get('success') and "3D打印高值材料券" not in skip_coupons_list:
                 claim_3dp_material(driver, coupon_result)
+
+            if not coupon_result["邀请免运优惠券"].get('success') and "邀请免运优惠券" not in skip_coupons_list:
+                claim_invite_coupon(driver, coupon_result, invite_link)
                 
-            if not coupon_result["FPC新客免费打样券"].get('success') or not coupon_result["FPC 100元优惠券"].get('success'):
-                claim_fpc_coupons(driver, coupon_result)
+            need_fpc1 = not coupon_result["FPC新客免费打样券"].get('success') and "FPC新客免费打样券" not in skip_coupons_list
+            need_fpc2 = not coupon_result["FPC 100元优惠券"].get('success') and "FPC 100元优惠券" not in skip_coupons_list
+            
+            if need_fpc1 or need_fpc2:
+                claim_fpc_coupons(driver, coupon_result, skip_coupons_list)
 
         except Exception as e:
             log(f"❌ 账号处理异常: {e}")
             success_this_round = False
             for name in coupon_names_ordered:
-                if not coupon_result[name].get('success'):
+                if not coupon_result[name].get('success') and name not in skip_coupons_list:
                     coupon_result[name] = {'success': False, 'reason': f'异常: {str(e)[:80]}'}
         finally:
             if driver:
                 try:
                     driver.quit()
-                    log("🔒 浏览器已关闭")
+                    log(f"🔒 浏览器已关闭")
                 except:
                     pass
             if os.path.exists(user_data_dir):
@@ -859,17 +980,31 @@ def process_single_account(username, password, account_index, total_accounts):
 
 def main():
     if len(sys.argv) < 3:
-        print("用法: python lingquan.py 账号1,账号2... 密码1,密码2...")
+        print("用法: python lingquan.py 账号1,账号2... 密码1,密码2... [邀请链接] [跳过券序号]")
         sys.exit(1)
 
     usernames = sys.argv[1].split(',')
     passwords = sys.argv[2].split(',')
+    invite_link = sys.argv[3] if len(sys.argv) > 3 else ""
+    skip_str = sys.argv[4] if len(sys.argv) > 4 else ""
+
+    skip_ids =[s.strip() for s in skip_str.split(',') if s.strip()]
+    id_to_name = {
+        "1": "3D打印30-20券",
+        "2": "3D打印高值材料券",
+        "3": "邀请免运优惠券",
+        "4": "FPC新客免费打样券",
+        "5": "FPC 100元优惠券"
+    }
+    skip_coupons_list =[id_to_name[sid] for sid in skip_ids if sid in id_to_name]
 
     if len(usernames) != len(passwords):
         log("❌ 账号密码数量不匹配")
         sys.exit(1)
 
     log(f"检测到 {len(usernames)} 个账号需要领券", show_time=False)
+    if skip_coupons_list:
+        log(f"将跳过领取以下券: {', '.join(skip_coupons_list)}", show_time=False)
 
     all_results = []
 
@@ -877,7 +1012,7 @@ def main():
         log(f"{'='*50}", show_time=False)
         log(f"🚀 正在处理账号 {i}/{len(usernames)}", show_time=False)
         log(f"{'='*50}", show_time=False)
-        result = process_single_account(u, p, i, len(usernames))
+        result = process_single_account(u, p, i, len(usernames), invite_link, skip_coupons_list)
         all_results.append(result)
         if i < len(usernames):
             log("⏳ 等待5秒后处理下一个账号...")
@@ -887,6 +1022,7 @@ def main():
     coupon_names_ordered = [
         "3D打印30-20券",
         "3D打印高值材料券",
+        "邀请免运优惠券",
         "FPC新客免费打样券",
         "FPC 100元优惠券"
     ]
@@ -900,9 +1036,14 @@ def main():
         for name in coupon_names_ordered:
             info = result['coupons'].get(name, {'success': False, 'reason': '未执行'})
             if info['success']:
-                status_str = "✔️"
+                reason_str = info.get('reason', '')
+                status_str = f"✔️ {reason_str}".strip() if reason_str else "✔️"
             else:
-                status_str = f"失败，原因:{info.get('reason', '未知')}"
+                reason_str = info.get('reason', '未知')
+                if '跳过' in reason_str:
+                    status_str = f"跳过 ({reason_str})"
+                else:
+                    status_str = f"失败，原因:{reason_str}"
             log(f"  {name}：{status_str}", show_time=False)
 
     log(f"{'='*50}", show_time=False)

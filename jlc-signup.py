@@ -15,6 +15,8 @@ import threading
 import queue
 from datetime import datetime
 from email.utils import parsedate_to_datetime
+from urllib.parse import urlparse, parse_qs, quote
+
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.common.exceptions import TimeoutException
@@ -529,7 +531,7 @@ def random_chinese_chars(count=3):
         name += random.choice(last_names)
     return name
 
-def register_account(hzm, config, email_index, fixed_password):
+def register_account(hzm, config, email_index, fixed_password, app_id, register_url, redirect_url, biz_extended_param):
     profile_dirs = []
 
     def create_new_profile_dir():
@@ -597,7 +599,7 @@ def register_account(hzm, config, email_index, fixed_password):
                     restore_url = "https://member.jlc.com/integrated/accountInfo/userAccountInfo?spm=JLC.MEMBER"
                 elif "passport.jlc.com" in url:
                     domain = "https://passport.jlc.com"
-                    restore_url = "https://passport.jlc.com/m/register"
+                    restore_url = register_url
                 else:
                     domain = "https://m.jlc.com"
                     restore_url = "https://m.jlc.com/m/register"
@@ -628,7 +630,7 @@ def register_account(hzm, config, email_index, fixed_password):
         
         for get_sms_loop in range(100):
             log(f"🌐 打开注册页面... (本阶段第 {get_sms_loop + 1} 次尝试)")
-            safe_get_page(driver, "https://passport.jlc.com/m/register")
+            safe_get_page(driver, register_url)
             time.sleep(random.uniform(3.5, 5.5))
             
             phone = None
@@ -652,7 +654,7 @@ def register_account(hzm, config, email_index, fixed_password):
             enc_phone = pwdEncrypt(phone)
             log("📡 发送 send-security-code...")
             r1 = safe_fetch("https://passport.jlc.com/api/cas/register/mobile/send-security-code", "POST", {
-                "phoneNumber": enc_phone, "captchaTicket": ticket, "appId": "JLC_MOBILE_APP"
+                "phoneNumber": enc_phone, "captchaTicket": ticket, "appId": app_id
             })
             if r1.get("code") != 200:
                 hzm.release_phone(phone)
@@ -703,7 +705,7 @@ def register_account(hzm, config, email_index, fixed_password):
                     except: pass
                     
                 temp_driver.set_page_load_timeout(20)
-                safe_get_page(temp_driver, "https://passport.jlc.com/m/register")
+                safe_get_page(temp_driver, register_url)
                 
                 if (time.time() - ip_get_time) > 50:
                     log("⚠ 页面加载完毕但代理 IP 寿命（60秒）已耗尽，准备重试获取新代理...")
@@ -732,9 +734,15 @@ def register_account(hzm, config, email_index, fixed_password):
         time.sleep(random.uniform(1.5, 2.5))
 
         log("📡 发送 get-init-session...")
-        r2 = safe_fetch("https://passport.jlc.com/api/cas/register/get-init-session", "POST", {
-            "appId": "JLC_MOBILE_APP", "redirectUrl": "https://m.jlc.com/pages/my/index#/from=jlc_cas", "clientType": "MOBILE-WEB"
-        })
+        payload_init_session = {
+            "appId": app_id, 
+            "redirectUrl": redirect_url, 
+            "clientType": "MOBILE-WEB"
+        }
+        if biz_extended_param:
+            payload_init_session["extendedParam"] = pwdEncrypt(biz_extended_param)
+
+        r2 = safe_fetch("https://passport.jlc.com/api/cas/register/get-init-session", "POST", payload_init_session)
         if r2.get("code") != 200:
             raise Exception(f"Session 初始化失败: {r2}")
         
@@ -769,18 +777,18 @@ def register_account(hzm, config, email_index, fixed_password):
 
         log("📡 确认协议...")
         safe_fetch("https://passport.jlc.com/api/cas/sso/doc/batch-read", "POST", {
-            "appId": "JLC_MOBILE_APP", "protocolClientType": "MOBILE", "protocolTypes": ["USER", "PRIVACY"]
+            "appId": app_id, "protocolClientType": "MOBILE", "protocolTypes": ["USER", "PRIVACY"]
         })
 
         log("📡 拉取用户信息...")
-        r_user = safe_fetch("https://passport.jlc.com/api/cas/sso/get-user-info", "POST", {"appId": "JLC_MOBILE_APP"})
+        r_user = safe_fetch("https://passport.jlc.com/api/cas/sso/get-user-info", "POST", {"appId": app_id})
         if r_user.get("code") != 200:
             log(f"⚠ 获取用户信息失败: {r_user}")
 
         enc_pass = pwdEncrypt(fixed_password)
         log(f"📡 设置统一登录密码...")
         r_pwd = safe_fetch("https://passport.jlc.com/api/cas/register/set-password", "POST", {
-            "password": enc_pass, "appId": "JLC_MOBILE_APP"
+            "password": enc_pass, "appId": app_id
         })
         if r_pwd.get("code") == 200:
             log(f"✅ 密码设置成功: {fixed_password}")
@@ -1052,8 +1060,8 @@ def register_account(hzm, config, email_index, fixed_password):
 
 def main():
     if len(sys.argv) < 4:
-        print("用法: python jlc.py 注册数量 统一密码 邮箱初始数字")
-        print("示例: python jlc.py 10 Password123 3")
+        print("用法: python jlc.py 注册数量 统一密码 邮箱初始数字 [邀请链接]")
+        print("示例: python jlc.py 10 Password123 3 https://jlc-fpc.com/?from=bul-8FLD")
         sys.exit(1)
 
     try:
@@ -1063,6 +1071,35 @@ def main():
     except ValueError:
         print("❌ 错误: 参数类型不正确，数量和邮箱初始数字必须为整数")
         sys.exit(1)
+
+    invite_link = sys.argv[4].strip() if len(sys.argv) >= 5 else ""
+
+    app_id = "JLC_MOBILE_APP"
+    register_url = "https://passport.jlc.com/m/register"
+    redirect_url = "https://m.jlc.com/pages/my/index#/from=jlc_cas"
+    biz_extended_param = None
+    
+    if invite_link:
+        try:
+            parsed_link = urlparse(invite_link)
+            qs = parse_qs(parsed_link.query)
+            
+            if "jlc-fpc.com" in parsed_link.netloc:
+                app_id = "FPC_BIZ_GATEWAY"
+            else:
+                app_id = "FPC_BIZ_GATEWAY"
+                
+            redirect_url = invite_link
+            
+            param_dict = {k: v[0] for k, v in qs.items()}
+            biz_extended_param = json.dumps(param_dict, separators=(',', ':'))
+            
+            encoded_redirect = quote(redirect_url, safe='')
+            encoded_biz = quote(biz_extended_param, safe='')
+            register_url = f"https://passport.jlc.com/m/register?appId={app_id}&backCode=1&redirectUrl={encoded_redirect}&bizExtendedParam={encoded_biz}"
+            log(f"🔗 识别到邀请链接，已转译为专属注册配置 | AppId: {app_id} | 拓展参数: {biz_extended_param}")
+        except Exception as e:
+            log(f"⚠ 解析邀请链接失败，将使用默认普通注册流程: {e}")
 
     config = read_config()
     hzm = HaoZhuMa(config["服务器地址"], config["API账号"], config["API密码"], config["项目ID"])
@@ -1088,7 +1125,7 @@ def main():
         log(f"{'='*50}")
 
         current_email_index = start_email_num + success_count
-        res = register_account(hzm, config, current_email_index, fixed_password)
+        res = register_account(hzm, config, current_email_index, fixed_password, app_id, register_url, redirect_url, biz_extended_param)
         
         if res and res.get("customerCode"):
             line = f"客编: {res['customerCode']} | 密码: {res['password']} | 手机号: {res['phone']} | 邮箱: {res['email']} | 归属: {res['attributionName']}"

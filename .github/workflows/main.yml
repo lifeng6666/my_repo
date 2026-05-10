@@ -18,6 +18,11 @@ on:
         required: true
         type: number
         default: 1
+      invite_link:
+        description: 'FPC邀请链接，不填则默认普通注册'
+        required: false
+        type: string
+        default: ''
 
 jobs:
   # Job 1: 预处理阶段 - 校验输入并动态生成矩阵分配计划
@@ -112,7 +117,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb
-
           Xvfb :99 -screen 0 1024x768x24 &
           echo "DISPLAY=:99" >> $GITHUB_ENV
 
@@ -120,10 +124,11 @@ jobs:
         env:
           DISPLAY: ':99'
         run: |
-          # 传入动态计算好的 数量、密码、递增序号
-          python -u jlc-signup.py ${{ matrix.batch_info.count }} '${{ github.event.inputs.password }}' ${{ matrix.batch_info.start_idx }}
+          # 传入动态计算好的 数量、密码、递增序号 以及自定义邀请链接
+          python -u jlc-signup.py ${{ matrix.batch_info.count }} '${{ github.event.inputs.password }}' ${{ matrix.batch_info.start_idx }} '${{ github.event.inputs.invite_link }}'
 
       - name: '重命名结果文件以便独立上传'
+        if: always()
         run: |
           if [ -f account.txt ]; then
             # 添加批次标识防止不同 job 的结果文件同名冲突
@@ -131,6 +136,7 @@ jobs:
           fi
 
       - name: '上传单批次临时文件'
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           path: batch-${{ matrix.batch_info.batch }}-account.txt
@@ -206,9 +212,11 @@ jobs:
         run: |
           # 运行同目录下的 push_results.py
           python push_results.py "${{ steps.merge.outputs.filename }}"
+      # ======================================================
 
       - name: '清理所有批次的临时 Artifacts'
         uses: geekyeggo/delete-artifact@v6
+        if: always()
         with:
           name: batch-*-account.txt
           failOnError: false

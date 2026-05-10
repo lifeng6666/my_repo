@@ -7,8 +7,16 @@ on:
         description: '账号组（英文逗号分隔）'
         required: true
       passwords:
-        description: '密码组（英文逗号分隔，与账号对应）'
+        description: '密码组（英文逗号分隔，必须与账号对应）'
         required: true
+      invite_link:
+        description: '邀请链接（选填，不填则跳过领取邀请免邮券绑定邀请账号）'
+        required: false
+        default: ''
+      skip_coupons:
+        description: '不领取的券序号(1:30-20券 2:高值材料券 3:邀请绑定&免运券 4:FPC免费券 5:FPC100元券)，多个序号用英文逗号隔开'
+        required: false
+        default: ''
 
 jobs:
   setup_matrix:
@@ -21,11 +29,15 @@ jobs:
         env:
           USERS: ${{ github.event.inputs.usernames }}
           PASSWORDS: ${{ github.event.inputs.passwords }}
+          INVITE_LINK: ${{ github.event.inputs.invite_link }}
+          SKIP_COUPONS: ${{ github.event.inputs.skip_coupons }}
         run: |
           python -c '
           import os, json
           users = [u.strip() for u in os.environ.get("USERS", "").split(",") if u.strip()]
           passwords = [p.strip() for p in os.environ.get("PASSWORDS", "").split(",") if p.strip()]
+          invite_link = os.environ.get("INVITE_LINK", "").strip()
+          skip_coupons = os.environ.get("SKIP_COUPONS", "").strip()
           
           if len(users) != len(passwords):
               print("Error: 账号与密码数量不匹配")
@@ -40,7 +52,7 @@ jobs:
               u_batch = ",".join(u_batch_list)
               p_batch = ",".join(p_batch_list)
               job_name = f"账号组{group_idx}({len(u_batch_list)}个号)"
-              matrix.append({"name": job_name, "usernames": u_batch, "passwords": p_batch})
+              matrix.append({"name": job_name, "usernames": u_batch, "passwords": p_batch, "invite_link": invite_link, "skip_coupons": skip_coupons})
               group_idx += 1
               
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
@@ -84,7 +96,10 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install requests==2.26.0
+          pip install lxml==4.6.5
           pip install selenium==3.141.0
+          pip install retrying==1.3.3
+          pip install wheel==0.37.1
           pip install serverchan_sdk==1.0.6
           pip install PyExecJS
           pip install DrissionPage
@@ -99,6 +114,9 @@ jobs:
           Xvfb :99 -screen 0 1024x768x24 &
           echo "DISPLAY=:99" >> $GITHUB_ENV
 
-      - name: '进行自动领券流程'
+      - name: '进行自动领券流程(日志在这里看)'
+        env:
+          INVITE_LINK: ${{ matrix.invite_link }}
+          SKIP_COUPONS: ${{ matrix.skip_coupons }}
         run: |
           python ./get-coupon.py "${{ matrix.usernames }}" "${{ matrix.passwords }}"
