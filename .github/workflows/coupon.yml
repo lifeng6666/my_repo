@@ -119,4 +119,4 @@ jobs:
           INVITE_LINK: ${{ matrix.invite_link }}
           SKIP_COUPONS: ${{ matrix.skip_coupons }}
         run: |
-          python ./get-coupon.py "${{ matrix.usernames }}" "${{ matrix.passwords }}"
+          python ./get-coupon.py "${{ matrix.usernames }}" "${{ matrix.passwords }}" "$INVITE_LINK" "$SKIP_COUPONS"
