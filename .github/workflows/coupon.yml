@@ -19,12 +19,12 @@ on:
         default: ''
 
 jobs:
-  setup_matrix:
+  prepare:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
-      - name: '动态配置矩阵'
+      - name: '切割账号分组'
         id: set-matrix
         env:
           USERS: ${{ github.event.inputs.usernames }}
@@ -61,11 +61,11 @@ jobs:
 
   running:
     name: ${{ matrix.name }}
-    needs: setup_matrix
+    needs: prepare
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-        include: ${{ fromJson(needs.setup_matrix.outputs.matrix) }}
+        include: ${{ fromJson(needs.prepare.outputs.matrix) }}
       fail-fast: false
 
     steps:
@@ -102,7 +102,7 @@ jobs:
           pip install wheel==0.37.1
           pip install serverchan_sdk==1.0.6
           pip install PyExecJS
-          pip install DrissionPage
+          pip install DrissionPage DataRecorder DownloadKit
           
       - name: '准备Chrome驱动'
         uses: nanasess/setup-chromedriver@v2

@@ -1,4 +1,4 @@
-name: 嘉立创注册机
+name: 嘉立创注册机lite版
 
 on:
   workflow_dispatch:
@@ -12,12 +12,7 @@ on:
         description: '统一设置的密码'
         required: true
         type: string
-        default: 'JLCjlc123123'
-      start_email_index:
-        description: '邮箱初始递增序号 (未配置默认从1开始)'
-        required: true
-        type: number
-        default: 1
+        default: 'Aa123123'
       invite_link:
         description: 'FPC邀请链接，多个请用英文逗号隔开，不填则默认普通注册'
         required: false
@@ -37,7 +32,6 @@ jobs:
           INVITE_LINKS: ${{ github.event.inputs.invite_link }}
         run: |
           TOTAL=${{ github.event.inputs.total_accounts }}
-          START_IDX=${{ github.event.inputs.start_email_index }}
           
           # 1. 校验异常输入
           if (( TOTAL <= 0 )); then
@@ -53,16 +47,15 @@ jobs:
           # 解析逗号分隔的邀请链接为数组
           IFS=',' read -ra LINKS_ARRAY <<< "$INVITE_LINKS"
 
-          # 2. 动态计算批次 (单次最多10个，最大50批，满足500个账号限制)
+          # 2. 动态计算批次 (单次最多20个，最大25批，满足500个账号限制)
           JSON="["
           REMAINING=$TOTAL
-          CURRENT_IDX=$START_IDX
           BATCH=1
           
-          while [ $REMAINING -gt 0 ] && [ $BATCH -le 50 ]; do
+          while [ $REMAINING -gt 0 ] && [ $BATCH -le 25 ]; do
             COUNT=$REMAINING
-            if [ $COUNT -gt 10 ]; then
-              COUNT=10
+            if [ $COUNT -gt 20 ]; then
+              COUNT=20
             fi
             
             if [ $BATCH -gt 1 ]; then
@@ -82,11 +75,10 @@ jobs:
             SAFE_LINK=$(echo "$LINK" | sed 's/"/\\"/g' | tr -d '\n\r')
             
             # 生成单个批次的 JSON 参数
-            JSON="$JSON{\"batch\": $BATCH, \"count\": $COUNT, \"start_idx\": $CURRENT_IDX, \"invite_link\": \"$SAFE_LINK\"}"
+            JSON="$JSON{\"batch\": $BATCH, \"count\": $COUNT, \"invite_link\": \"$SAFE_LINK\"}"
             
-            # 扣除已分配数量，递增邮箱和批次号
+            # 扣除已分配数量，递增批次号
             REMAINING=$((REMAINING - COUNT))
-            CURRENT_IDX=$((CURRENT_IDX + COUNT))
             BATCH=$((BATCH + 1))
           done
           JSON="$JSON]"
@@ -130,10 +122,13 @@ jobs:
       - name: '准备Chrome驱动'
         uses: nanasess/setup-chromedriver@v2
 
-      - name: '安装并启动Xvfb虚拟显示器'
+      - name: '安装Xvfb虚拟显示器'
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb
+
+      - name: '启动虚拟显示器'
+        run: |
           Xvfb :99 -screen 0 1024x768x24 &
           echo "DISPLAY=:99" >> $GITHUB_ENV
 
@@ -143,8 +138,8 @@ jobs:
           INVITE_LINK: ${{ matrix.batch_info.invite_link }}
           PASSWORD: ${{ github.event.inputs.password }}
         run: |
-          # 传入动态计算好的 数量、密码、递增序号 以及 对应的邀请链接
-          python -u jlc-signup.py ${{ matrix.batch_info.count }} "$PASSWORD" ${{ matrix.batch_info.start_idx }} "$INVITE_LINK"
+          # 传入动态计算好的 数量、密码 以及 对应的邀请链接
+          python -u jlc-signup-lite.py ${{ matrix.batch_info.count }} "$PASSWORD" "$INVITE_LINK"
 
       - name: '重命名结果文件以便独立上传'
         if: always()
@@ -191,12 +186,11 @@ jobs:
           
           # 检查中间文件是否有实际内容
           if [ -s "$TEMP_MERGED" ]; then
-            # 统计提取成功行数（实注册）、未设置归属/未绑定邮箱行数（信息不全）
+            # 统计提取成功行数（实注册）
             ACTUAL=$(awk '/客编:/{count++} END{print count+0}' "$TEMP_MERGED")
-            INCOMPLETE=$(awk '/未设置|未绑定/{count++} END{print count+0}' "$TEMP_MERGED")
             
             # 拼装为全新的文件名
-            MERGED_FILE="立创注册结果(应注册${TOTAL},实注册${ACTUAL},信息不全${INCOMPLETE}).txt"
+            MERGED_FILE="立创注册结果(应注册${TOTAL},实注册${ACTUAL}).txt"
             mv "$TEMP_MERGED" "$MERGED_FILE"
             
             echo "has_data=true" >> $GITHUB_OUTPUT
@@ -240,7 +234,6 @@ jobs:
         run: |
           # 运行同目录下的 push_results.py
           python push_results.py "${{ steps.merge.outputs.filename }}"
-      # ======================================================
 
       - name: '清理所有批次的临时 Artifacts'
         uses: geekyeggo/delete-artifact@v6

@@ -3,8 +3,6 @@ import sys
 import time
 import json
 import random
-import imaplib
-import email
 import re
 import subprocess
 import requests
@@ -14,18 +12,22 @@ import psutil
 import threading
 import queue
 from datetime import datetime
-from email.utils import parsedate_to_datetime
 from urllib.parse import urlparse, parse_qs, quote
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 from selenium.common.exceptions import TimeoutException
-
-from Utils import pwdEncrypt
 
 class BrowserError(Exception):
     """自定义异常: 用于精确标识浏览器底层打不开、崩溃或彻底超时的情况"""
     pass
+
+try:
+    from Utils import pwdEncrypt
+except ImportError:
+    print("❌ 错误: 未找到 Utils.py，请确保同目录下存在该文件以进行 SM2 加密")
+    sys.exit(1)
 
 def log(msg):
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}", flush=True)
@@ -372,7 +374,7 @@ def call_aliv3_script(script_name, proxy_str, timeout_seconds=180):
     
     start_time = time.time()
     ticket = None
-    output_buffer = []
+    output_buffer =[]
     
     q = queue.Queue()
     
@@ -438,101 +440,8 @@ def call_aliv3_script(script_name, proxy_str, timeout_seconds=180):
             
     return ticket
 
-def get_email_code(user, pwd, customer_code, timeout=60):
-    log(f"📧 开始登录邮箱 {user} 获取验证码 (超时 {timeout}s)...")
-    start_time = time.time()
-    end_time = start_time + timeout
-
-    while time.time() < end_time:
-        mail = None
-        try:
-            mail = imaplib.IMAP4_SSL("imap.gmail.com")
-            mail.login(user, pwd)
-            
-            stat, count_data = mail.select("inbox")
-            try:
-                num_messages = int(count_data[0])
-            except:
-                num_messages = 0
-
-            if num_messages > 0:
-                check_limit = max(0, num_messages - 10)
-                
-                for i in range(num_messages, check_limit, -1):
-                    try:
-                        typ, msg_data = mail.fetch(str(i), '(RFC822)')
-                        for response_part in msg_data:
-                            if isinstance(response_part, tuple):
-                                msg = email.message_from_bytes(response_part[1])
-                                
-                                date_str = msg.get("Date")
-                                email_timestamp = 0
-                                try:
-                                    if date_str:
-                                        email_dt = parsedate_to_datetime(date_str)
-                                        email_timestamp = email_dt.timestamp()
-                                except:
-                                    pass
-
-                                if email_timestamp > 0 and email_timestamp < (start_time - 5):
-                                    continue
-                                
-                                full_body = ""
-                                if msg.is_multipart():
-                                    for part in msg.walk():
-                                        content_type = part.get_content_type()
-                                        if content_type in ["text/plain", "text/html"]:
-                                            try:
-                                                payload = part.get_payload(decode=True)
-                                                if payload:
-                                                    full_body += payload.decode(errors='ignore')
-                                            except:
-                                                pass
-                                else:
-                                    try:
-                                        payload = msg.get_payload(decode=True)
-                                        if payload:
-                                            full_body = payload.decode(errors='ignore')
-                                    except:
-                                        pass
-                                
-                                if f"尊敬的客户{customer_code}" in full_body:
-                                    match = re.search(r"验证码.*?(\d{6})", full_body)
-                                    if match:
-                                        code = match.group(1)
-                                        log(f"✅ 成功从邮件提取验证码: {code} (客编匹配成功)")
-                                        return code
-                    except Exception:
-                        continue
-        except Exception as e:
-            log(f"⚠ 邮箱连接或读取异常: {e}")
-        finally:
-            if mail:
-                try:
-                    mail.logout()
-                except:
-                    pass
-        time.sleep(3)
-        
-    log("❌ 邮箱接收验证码超时")
-    return None
-
-def random_chinese_chars(count=3):
-    first_names = "赵钱孙李周吴郑王冯陈褚卫蒋沈韩杨标记朱秦尤许何吕施张孔曹严华金魏陶姜"
-    last_names = "伟芳娜秀丽敏静坚勇婷杰娟涛明超强霞平刚桂英"
-    
-    if count <= 0:
-        return ""
-    if count == 1:
-        return random.choice(first_names)
-        
-    name = random.choice(first_names)
-    for _ in range(count - 1):
-        name += random.choice(last_names)
-    return name
-
-def register_account(hzm, config, email_index, fixed_password, app_id, register_url, redirect_url, biz_extended_param):
-    profile_dirs = []
+def register_account(hzm, config, fixed_password, app_id, register_url, redirect_url, biz_extended_param):
+    profile_dirs =[]
 
     def create_new_profile_dir():
         d = tempfile.mkdtemp(prefix="jlc_profile_")
@@ -540,8 +449,7 @@ def register_account(hzm, config, email_index, fixed_password, app_id, register_
         return d
 
     account_info = {
-        "customerCode": "", "password": fixed_password, "phone": "",
-        "email": "", "attributionName": "未设置"
+        "customerCode": "", "password": fixed_password
     }
     
     driver = None
@@ -582,7 +490,7 @@ def register_account(hzm, config, email_index, fixed_password, app_id, register_
                 try: 
                     saved_temp_cookies = driver.get_cookies()
                     force_kill_driver(driver)
-                except: saved_temp_cookies = []
+                except: saved_temp_cookies =[]
                 
                 if proxy_str:
                     log("🔄 尝试获取新代理进行重连...")
@@ -609,7 +517,7 @@ def register_account(hzm, config, email_index, fixed_password, app_id, register_
                     driver.get(f"{domain}/favicon.ico")
                 except: pass
                 
-                valid_keys = ['name', 'value', 'domain', 'path', 'secure', 'httpOnly', 'expiry', 'sameSite']
+                valid_keys =['name', 'value', 'domain', 'path', 'secure', 'httpOnly', 'expiry', 'sameSite']
                 for c in saved_temp_cookies:
                     clean_c = {k: v for k, v in c.items() if k in valid_keys}
                     try: driver.add_cookie(clean_c)
@@ -643,7 +551,6 @@ def register_account(hzm, config, email_index, fixed_password, app_id, register_
                 
             if not phone:
                 raise Exception("连续 20 次尝试未能从接码平台获取到手机号，主动终止注册")
-            account_info["phone"] = phone
             log(f"📱 成功获取手机号: {phone}")
 
             ticket = call_aliv3_script("AliV3-register.py", proxy_str)
@@ -676,7 +583,7 @@ def register_account(hzm, config, email_index, fixed_password, app_id, register_
             temp_cookies_1 = driver.get_cookies()
             force_kill_driver(driver)
         except:
-            temp_cookies_1 = []
+            temp_cookies_1 =[]
             pass
         
         proxy_success = False
@@ -690,7 +597,7 @@ def register_account(hzm, config, email_index, fixed_password, app_id, register_
             ip_get_time = time.time()
             temp_driver = create_chrome_driver(create_new_profile_dir(), proxy_str, disable_images=True)
             
-            log("🌐 [代理] 重建浏览器环境，跨域恢复 Cookie 状态...")
+            log("🌐[代理] 重建浏览器环境，跨域恢复 Cookie 状态...")
             try:
                 temp_driver.set_page_load_timeout(10)
                 try:
@@ -698,7 +605,7 @@ def register_account(hzm, config, email_index, fixed_password, app_id, register_
                 except TimeoutException:
                     pass 
                 
-                valid_keys = ['name', 'value', 'domain', 'path', 'secure', 'httpOnly', 'expiry', 'sameSite']
+                valid_keys =['name', 'value', 'domain', 'path', 'secure', 'httpOnly', 'expiry', 'sameSite']
                 for c in temp_cookies_1:
                     clean_c = {k: v for k, v in c.items() if k in valid_keys}
                     try: temp_driver.add_cookie(clean_c)
@@ -797,244 +704,9 @@ def register_account(hzm, config, email_index, fixed_password, app_id, register_
 
         safe_fetch("https://passport.jlc.com/api/cas/secure/check-callback-url", "POST", {"callbackUrl": "https://m.jlc.com"})
 
-        log("🔄 注册阶段结束，关闭代理浏览器，无代理进行归属设置...")
-        try:
-            force_kill_driver(driver)
-        except: pass
-        time.sleep(2)
-
-        driver = create_chrome_driver(create_new_profile_dir(), proxy_str=None, disable_images=True)
+        log("✔ 该账号注册阶段结束，返回数据...")
         
-        log("🌐 浏览器已启动，准备执行新注册账号登录流程...")
-        login_success = False
-        login_headers = {'AppId': 'JLC_PORTAL_PC', 'ClientType': 'PC-WEB'}
-        
-        for login_attempt in range(3):
-            try:
-                safe_get_page(driver, "https://passport.jlc.com/login")
-                time.sleep(2)
-                
-                log(f"📡 发送登录初始化会话 (尝试 {login_attempt+1})...")
-                dp_fetch(driver, "https://passport.jlc.com/api/cas/login/get-init-session", "POST", {
-                    "appId": "JLC_PORTAL_PC", "clientType": "PC-WEB"
-                }, extra_headers=login_headers)
-                
-                log("📞 调用 AliV3-login.py 过登录滑块...")
-                login_ticket = call_aliv3_script("AliV3-login.py", None)
-                if not login_ticket:
-                    raise Exception("获取登录 CaptchaTicket 失败")
-                    
-                enc_user = pwdEncrypt(customer_code)
-                log("📡 发送登录请求...")
-                login_res = dp_fetch(driver, "https://passport.jlc.com/api/cas/login/with-password", "POST", {
-                    "username": enc_user,
-                    "password": enc_pass,
-                    "isAutoLogin": False,
-                    "captchaTicket": login_ticket
-                }, extra_headers=login_headers)
-                
-                if login_res.get("success") and login_res.get("code") == 2017:
-                    log("✅ 登录请求成功！")
-                else:
-                    raise Exception(f"登录接口遭拒或密码错误: {login_res}")
-                    
-                log("🔍 验证登录状态...")
-                safe_get_page(driver, "https://member.jlc.com/")
-                
-                for wait_idx in range(5):
-                    time.sleep(2)
-                    if "客编" in driver.page_source or "customerCode" in driver.page_source or customer_code in driver.page_source:
-                        log("✅ 验证登录态成功！")
-                        login_success = True
-                        break
-                    else:
-                        log(f"⏳ 页面数据渲染中或跳转中，等待重试... ({wait_idx+1}/5)")
-                
-                if login_success:
-                    break
-                else:
-                    raise Exception("登录态未能成功在页面中渲染完毕，可能被隐式拦截或重定向失败")
-                    
-            except Exception as e:
-                log(f"⚠ 登录尝试 {login_attempt+1} 失败: {e}")
-                time.sleep(3)
-                
-        if not login_success:
-            raise Exception("新注册账号登录彻底失败，可能注册出现异常，终止后续绑定环节")
-
-        log("🌐 开始设置账号归属...")
-        for attempt in range(3):
-            try:
-                driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
-                    'source': """
-                    window.__jlc_secretkey = null;
-                    const origSetRequestHeader = XMLHttpRequest.prototype.setRequestHeader;
-                    XMLHttpRequest.prototype.setRequestHeader = function(name, value) {
-                        if (name.toLowerCase() === 'secretkey') {
-                            window.__jlc_secretkey = value;
-                        }
-                        return origSetRequestHeader.apply(this, arguments);
-                    };
-                    """
-                })
-
-                driver.get_log('performance')
-                safe_get_page(driver, "https://member.jlc.com/integrated/accountInfo/userAccountInfo?spm=JLC.MEMBER")
-                
-                extra_headers = {}
-                log("🔄 正在拦截页面合法鉴权头...")
-                
-                for sniff_loop in range(2):
-                    start_wait = time.time()
-                    found_key = False
-                    
-                    while time.time() - start_wait < 10:
-                        logs = driver.get_log('performance')
-                        for entry in logs:
-                            try:
-                                msg = json.loads(entry['message'])['message']
-                                if msg['method'] == 'Network.requestWillBeSent':
-                                    req = msg['params']['request']
-                                    if 'member.jlc.com/api/' in req['url'] and req['method'].upper() != 'OPTIONS':
-                                        req_headers = {str(k).lower(): str(v) for k, v in req['headers'].items()}
-                                        if 'secretkey' in req_headers:
-                                            extra_headers['secretkey'] = req_headers['secretkey']
-                                            found_key = True
-                                            break
-                            except Exception:
-                                continue
-                        if found_key:
-                            break
-                        time.sleep(0.5)
-                        
-                    if 'secretkey' in extra_headers:
-                        break
-                    
-                    if sniff_loop == 0:
-                        log("⚠ 嗅探未抓到鉴权头，触发页面刷新重试...")
-                        driver.refresh()
-                
-                if 'secretkey' in extra_headers:
-                    log(f"✅ 成功截获合法鉴权头(SecretKey): {extra_headers['secretkey'][:10]}...")
-                else:
-                    log("⚠ 遍历了所有请求仍未截获鉴权头，启动 JS 缓存兜底方案...")
-                    fallback_sk = driver.execute_script("""
-                        return window.__jlc_secretkey || 
-                               window.localStorage.getItem('secretkey') || 
-                               window.localStorage.getItem('secretKey') || 
-                               window.sessionStorage.getItem('secretkey') || 
-                               window.sessionStorage.getItem('secretKey');
-                    """)
-                    if fallback_sk:
-                        extra_headers['secretkey'] = fallback_sk
-                        log(f"✅ 成功通过 JS 底层缓存兜底提取到 SecretKey: {fallback_sk[:10]}...")
-                    else:
-                        raise Exception("鉴权头(SecretKey)彻底缺失无法进行归属绑定，可能登录已失效")
-
-                extra_headers['support-cookie-samesite'] = 'true'
-                time.sleep(5)
-                
-                dp_fetch(driver, "https://member.jlc.com/api/integrated/customerAttribution/queryCustomerAttributionByParam", "POST", {"source": "JLC"}, extra_headers=extra_headers)
-                
-                hzm.get_phone(phone) 
-                t_stamp = int(time.time() * 1000)
-                dp_fetch(driver, f"https://member.jlc.com/api/integrated/customer/type/sendSmsNew?source=JLC&_t={t_stamp}", "GET", extra_headers=extra_headers)
-                
-                r_merge = dp_fetch(driver, "https://member.jlc.com/api/integrated/customerInvoiceInfo/group/showMergeData", "POST", extra_headers=extra_headers)
-                
-                sms_code2 = hzm.get_message(phone)
-                if not sms_code2:
-                    hzm.release_phone(phone)
-                    raise Exception("归属设置获取短信超时")
-
-                attr_name = random_chinese_chars(3)
-                
-                payload_attr_name = attr_name
-                
-                log(f"📡 发送 configAttribution 归属设置主请求...")
-                r_attr = dp_fetch(driver, "https://member.jlc.com/api/integrated/customerAttribution/configAttribution", "POST", {
-                    "source": "JLC", "smsCode": sms_code2.strip(), "customerType": 2, "attributionPersonName": payload_attr_name
-                }, extra_headers=extra_headers)
-                
-                if r_attr.get("success") is True and r_attr.get("code") == 200:
-                    log(f"✅ 归属接口返回设置成功！")
-                else:
-                    log(f"❌ configAttribution 接口返回异常: {r_attr}")
-                    raise Exception(f"归属设置明确拒绝: {r_attr}")
-                
-                r_check = dp_fetch(driver, "https://member.jlc.com/api/integrated/customerAttribution/queryCustomerAttributionConfig", "POST", {}, extra_headers=extra_headers)
-                if r_check.get("code") == 200 and r_check.get("data", {}).get("attributionName"):
-                    account_info["attributionName"] = attr_name
-                    log(f"✅ 成功设置归属名: {attr_name}")
-                    break
-                else:
-                    raise Exception(f"验证归属失败: {r_check}")
-            except Exception as e:
-                log(f"⚠ 归属设置第 {attempt+1} 次尝试失败: {e}")
-                if attempt == 2:
-                    log("❌ 超过最大重试，跳过归属设置")
-
-        log("🌐 开始绑定邮箱...")
-        for attempt in range(3):
-            try:
-                safe_get_page(driver, "https://passport.jlc.com/set-email")
-                time.sleep(3)
-                
-                dp_fetch(driver, "https://passport.jlc.com/api/cas/sso/get-user-info", "POST", {"appId": "JLC_BIZ_GATEWAY"})
-                
-                hzm.get_phone(phone)
-                
-                ticket2 = call_aliv3_script("AliV3-update_email_by_phone.py", None)
-                r_sm = dp_fetch(driver, "https://passport.jlc.com/api/cas/modify/email/send-mobile-code", "POST", {
-                    "captchaTicket": ticket2, "appId": "JLC_BIZ_GATEWAY"
-                })
-                if r_sm.get("code") != 200:
-                    raise Exception(f"发送原手机验证码失败: {r_sm}")
-
-                dp_fetch(driver, "https://passport.jlc.com/api/cas/modify/email/get-init-session", "POST", {"appId": "JLC_BIZ_GATEWAY"})
-                
-                sms_code3 = hzm.get_message(phone)
-                if not sms_code3:
-                    hzm.release_phone(phone)
-                    raise Exception("绑定邮箱获取短信超时")
-
-                r_chk = dp_fetch(driver, "https://passport.jlc.com/api/cas/modify/email/check-mobile-code", "POST", {"validateCode": sms_code3})
-                if r_chk.get("code") != 2062:
-                    raise Exception(f"校验手机验证码失败: {r_chk}")
-
-                ticket3 = call_aliv3_script("AliV3-update_new_email.py", None)
-                
-                base_email = config["邮箱"].split("@")[0]
-                domain = config["邮箱"].split("@")[1]
-                target_email = f"{base_email}+{email_index}@{domain}"
-                enc_email = pwdEncrypt(target_email)
-                log(f"📡 正在向新邮箱 {target_email} 发送验证码...")
-                
-                r_ne = dp_fetch(driver, "https://passport.jlc.com/api/cas/modify/email/send-new-email-code", "POST", {
-                    "email": enc_email, "captchaTicket": ticket3, "appId": "JLC_BIZ_GATEWAY"
-                })
-                if r_ne.get("code") != 200:
-                    raise Exception(f"❌ 发送新邮箱验证码失败: {r_ne}")
-                log("✅ 新邮箱验证码发送请求成功，准备登录邮箱查收...")
-
-                email_code = get_email_code(config["邮箱"], config["邮箱密码"], customer_code)
-                if not email_code:
-                    raise Exception("无法从邮箱获取验证码")
-                r_ce = dp_fetch(driver, "https://passport.jlc.com/api/cas/modify/email/change-email", "POST", {
-                    "email": enc_email, "validateCode": email_code
-                })
-                if r_ce.get("code") == 2063:
-                    account_info["email"] = target_email
-                    log(f"✅ 成功绑定邮箱: {target_email}")
-                    break
-                else:
-                    raise Exception(f"邮箱最终绑定请求失败: {r_ce}")
-            except Exception as e:
-                log(f"⚠ 绑定邮箱第 {attempt+1} 次尝试失败: {e}")
-                if attempt == 2:
-                    log("❌ 超过最大重试，绑定邮箱失败")
-                    account_info["email"] = "未绑定"
-
+        # 提取到客编与密码后立即返回，进入下一个
         return account_info
 
     except BrowserError as e:
@@ -1042,7 +714,7 @@ def register_account(hzm, config, email_index, fixed_password, app_id, register_
         return {"error": "browser_error"}
     except Exception as e:
         err_str = str(e).lower()
-        if any(kw in err_str for kw in ["timeout", "timed out", "renderer", "session", "chrome not reachable", "disconnected", "no such window", "failed to start"]):
+        if any(kw in err_str for kw in["timeout", "timed out", "renderer", "session", "chrome not reachable", "disconnected", "no such window", "failed to start"]):
             log(f"❌ 浏览器引擎打不开或异常崩溃: {e}")
             return {"error": "browser_error"}
             
@@ -1059,20 +731,19 @@ def register_account(hzm, config, email_index, fixed_password, app_id, register_
             shutil.rmtree(d, ignore_errors=True)
 
 def main():
-    if len(sys.argv) < 4:
-        print("用法: python jlc.py 注册数量 统一密码 邮箱初始数字 [邀请链接]")
-        print("示例: python jlc.py 10 Password123 3 https://jlc-fpc.com/?from=bul-8FLD")
+    if len(sys.argv) < 3:
+        print("用法: python jlc.py 注册数量 统一密码 [邀请链接]")
+        print("示例: python jlc.py 10 Password123 https://jlc-fpc.com/?from=bul-XXXX")
         sys.exit(1)
 
     try:
         reg_count = int(sys.argv[1])
         fixed_password = sys.argv[2]
-        start_email_num = int(sys.argv[3])
     except ValueError:
-        print("❌ 错误: 参数类型不正确，数量和邮箱初始数字必须为整数")
+        print("❌ 错误: 参数类型不正确，数量必须为整数")
         sys.exit(1)
 
-    invite_link = sys.argv[4].strip() if len(sys.argv) >= 5 else ""
+    invite_link = sys.argv[3].strip() if len(sys.argv) >= 4 else ""
 
     app_id = "JLC_MOBILE_APP"
     register_url = "https://passport.jlc.com/m/register"
@@ -1112,7 +783,7 @@ def main():
         log("❌ 余额不足 0.3 元，拒绝运行")
         sys.exit(1)
 
-    success_accounts = []
+    success_accounts =[]
     success_count = 0
     consecutive_failures = 0  
 
@@ -1124,11 +795,10 @@ def main():
         log(f"🚀 开始注册任务进度: {success_count + 1}/{reg_count} (当前账号尝试第 {current_attempt} 次)")
         log(f"{'='*50}")
 
-        current_email_index = start_email_num + success_count
-        res = register_account(hzm, config, current_email_index, fixed_password, app_id, register_url, redirect_url, biz_extended_param)
+        res = register_account(hzm, config, fixed_password, app_id, register_url, redirect_url, biz_extended_param)
         
         if res and res.get("customerCode"):
-            line = f"客编: {res['customerCode']} | 密码: {res['password']} | 手机号: {res['phone']} | 邮箱: {res['email']} | 归属: {res['attributionName']}"
+            line = f"客编: {res['customerCode']} | 密码: {res['password']}"
             success_accounts.append(line)
             with open("account.txt", "a", encoding="utf-8") as f:
                 f.write(line + "\n")
@@ -1138,7 +808,7 @@ def main():
             consecutive_failures = 0  
             
             if success_count < reg_count:
-                wait_time = random.randint(120, 480)
+                wait_time = random.randint(45, 150)
                 log(f"⏳ 随机等待 {wait_time} 秒后继续下一个注册...")
                 time.sleep(wait_time)
                 
@@ -1157,7 +827,7 @@ def main():
             log(f"❌ 本次注册未能成功提取账号信息，准备重试... (当前连续失败: {consecutive_failures}/10)")
             time.sleep(10)
 
-    log("✨ 任务运行结束！")
+    log("\n✨ 任务运行结束！")
     if success_accounts:
         log("以下为成功注册的账号列表：")
         for acc in success_accounts:
