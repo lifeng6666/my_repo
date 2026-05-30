@@ -167,8 +167,8 @@ class HaoZhuMa:
             return -1
 
     def get_phone(self, phone=None):
-        base_url = f"{self.host}/sms/?api=getPhone&token={self.token}&sid={self.sid}&auther=sorenhugo58"
-        url = f"{base_url}&phone={phone}" if phone else f"{base_url}&ascription=2&exclude=192"
+        base_url = f"{self.host}/sms/?api=getPhone&token={self.token}&sid={self.sid}"
+        url = f"{base_url}&phone={phone}" if phone else f"{base_url}&ascription=2"
         try:
             resp = requests.get(url, timeout=15).json()
             if str(resp.get("code")) in ("0", "200"):
