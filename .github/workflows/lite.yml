@@ -12,7 +12,7 @@ on:
         description: '统一设置的密码'
         required: true
         type: string
-        default: 'Aa123123'
+        default: 'JLCjlc123123'
       invite_link:
         description: 'FPC邀请链接，多个请用英文逗号隔开，不填则默认普通注册'
         required: false
