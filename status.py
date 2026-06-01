@@ -621,7 +621,7 @@ def execute_step_5(driver):
                         "weixinCustomerId": 0,
                         "unbindFlag": "0"
                     }
-                    log(f"  [-] 正在请求解绑第 {idx} 个目标 (UnionID: {union_id[:8]}***) ...")
+                    log(f"  [-] 正在请求解绑第 {idx} 个目标 (UnionID: {union_id}) ...")
                     res_unbind = send_post_request(driver, url_unbind, unbind_body)
                     if isinstance(res_unbind, dict) and res_unbind.get('code') == 200:
                         log(f"  [+] 解绑成功")
