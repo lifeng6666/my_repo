@@ -1165,6 +1165,14 @@ def main():
     else:
         log("⚠ 本次运行未能成功注册任何账号。")
 
+    # ================= 成本结算模块 =================
+    log("📊 成本结算：")
+    final_bal = hzm.check_balance() # check_balance 内部会顺便打印出当前余额
+    if bal >= 0 and final_bal >= 0:
+        cost = bal - final_bal
+        log(f"💸 本次注册总成本: {round(cost, 4)} 元")
+    # ===============================================
+
     if success_count < reg_count:
         log("❌ 有账号注册失败")
         sys.exit(1)

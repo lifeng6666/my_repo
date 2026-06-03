@@ -827,13 +827,21 @@ def main():
             log(f"❌ 本次注册未能成功提取账号信息，准备重试... (当前连续失败: {consecutive_failures}/10)")
             time.sleep(10)
 
-    log("\n✨ 任务运行结束！")
+    log("✨ 任务运行结束！")
     if success_accounts:
         log("以下为成功注册的账号列表：")
         for acc in success_accounts:
             log(acc)
     else:
         log("⚠ 本次运行未能成功注册任何账号。")
+
+    # ================= 成本结算模块 =================
+    log("\n📊 成本结算：")
+    final_bal = hzm.check_balance() # check_balance 内部会顺便打印出当前余额
+    if bal >= 0 and final_bal >= 0:
+        cost = bal - final_bal
+        log(f"💸 本次注册总成本: {round(cost, 4)} 元")
+    # ===============================================
 
     if success_count < reg_count:
         log("❌ 有账号注册失败")

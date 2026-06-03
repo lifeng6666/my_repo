@@ -1,0 +1,260 @@
+name: 嘉立创金豆查询
+
+on:
+  workflow_dispatch: # 只允许手动触发
+    inputs:
+      accounts:
+        description: '账号列表 (多个账号请用英文逗号 , 分隔)'
+        required: true
+        type: string
+      passwords:
+        description: '密码列表 (多个密码请用英文逗号 , 分隔，需与账号一一对应)'
+        required: true
+        type: string
+
+env:
+  # 设置时区为北京时间
+  TZ: Asia/Shanghai
+
+jobs:
+  # ==================================================================================
+  # 数据预处理
+  # ==================================================================================
+  generate-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: 解析账号并分组
+        id: set-matrix
+        env:
+          ACCOUNTS_INPUT: ${{ inputs.accounts }}
+          PASSWORDS_INPUT: ${{ inputs.passwords }}
+        shell: python
+        run: |
+          import os
+          import json
+          import math
+          import sys
+
+          accounts_str = os.environ.get('ACCOUNTS_INPUT', '')
+          passwords_str = os.environ.get('PASSWORDS_INPUT', '')
+          
+          accounts = [x.strip() for x in accounts_str.split(',') if x.strip()]
+          passwords = [x.strip() for x in passwords_str.split(',') if x.strip()]
+
+          print(f"Total valid accounts found: {len(accounts)}")
+          print(f"Total valid passwords found: {len(passwords)}")
+
+          if len(accounts) != len(passwords):
+              print("::error::输入的账号数量与密码数量不一致！工作流将被终止。")
+              sys.exit(1)
+
+          if len(accounts) == 0:
+              print("::error::未提供有效的账号！")
+              sys.exit(1)
+
+          account_pairs = list(zip(accounts, passwords))
+
+          chunk_size = 50
+          chunks = []
+          total_chunks = math.ceil(len(account_pairs) / chunk_size)
+
+          for i in range(total_chunks):
+              batch = account_pairs[i*chunk_size : (i+1)*chunk_size]
+              users_str = ",".join([x[0] for x in batch])
+              pwds_str = ",".join([x[1] for x in batch])
+              
+              chunks.append({
+                  "index": i + 1,
+                  "users": users_str,
+                  "pwds": pwds_str
+              })
+
+          matrix_json = json.dumps(chunks)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f"matrix={matrix_json}\n")
+
+  # ==================================================================================
+  # 执行签到
+  # ==================================================================================
+  signin-process:
+    needs: generate-matrix
+    runs-on: ubuntu-22.04
+    strategy:
+      max-parallel: 10
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.generate-matrix.outputs.matrix) }}
+
+    name: 账号组${{ matrix.index }}
+
+    steps:
+      - name: '检出代码'
+        uses: actions/checkout@v6
+
+      # --- 环境配置部分  ---
+      - name: '设置Python环境'
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+
+      - name: '设置Node.js环境'
+        uses: actions/setup-node@v6
+        with:
+          node-version: '18'
+
+      - name: '设置时区为北京时间'
+        run: |
+          sudo timedatectl set-timezone Asia/Shanghai || true
+          echo "当前时间: $(date)"
+
+      - name: '安装依赖'
+        run: |
+          pip install --upgrade pip
+          pip install requests==2.26.0
+          pip install lxml==4.6.5
+          pip install selenium==3.141.0
+          pip install retrying==1.3.3
+          pip install wheel==0.37.1
+          pip install serverchan_sdk==1.0.6
+          pip install PyExecJS
+          pip install DrissionPage DataRecorder DownloadKit
+
+      - name: '准备Chrome驱动'
+        uses: nanasess/setup-chromedriver@v2
+
+      - name: '安装Xvfb虚拟显示器'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+
+      - name: '启动虚拟显示器'
+        run: |
+          Xvfb :99 -screen 0 1024x768x24 &
+          echo "DISPLAY=:99" >> $GITHUB_ENV
+        
+      - name: '运行签到脚本'
+        env:
+          DISPLAY: ':99'
+        run: |
+          echo "正在运行第 ${{ matrix.index }} 组账号..."
+          python ./statistics.py "${{ matrix.users }}" "${{ matrix.pwds }}" "true" "${{ matrix.index }}"
+
+      - name: '重命名结果文件'
+        if: always()
+        run: |
+          if [ -f password-changed.txt ]; then
+            mv password-changed.txt "password_changed_group${{ matrix.index }}.txt"
+          fi
+
+      - name: '上传密码修改记录'
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          path: password_changed_group${{ matrix.index }}.txt
+          if-no-files-found: ignore
+          archive: false
+          retention-days: 5
+
+      - name: '上传结果文件供汇总'
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          path: jlc_result_${{ matrix.index }}.json
+          if-no-files-found: ignore
+          archive: false
+          retention-days: 1
+
+  # ==================================================================================
+  # 汇总所有账号组结果
+  # ==================================================================================
+  summary:
+    needs: signin-process
+    runs-on: ubuntu-latest
+    if: always()
+
+    # 注入环境变量（用于推送）
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      WECHAT_WEBHOOK_KEY: ${{ secrets.WECHAT_WEBHOOK_KEY }}
+      DINGTALK_WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
+      PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+      SERVERCHAN_SCKEY: ${{ secrets.SERVERCHAN_SCKEY }}
+      SERVERCHAN3_SCKEY: ${{ secrets.SERVERCHAN3_SCKEY }}
+      COOLPUSH_SKEY: ${{ secrets.COOLPUSH_SKEY }}
+      CUSTOM_WEBHOOK: ${{ secrets.CUSTOM_WEBHOOK }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: '检出代码'
+        uses: actions/checkout@v6
+
+      - name: '设置Python环境'
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+
+      - name: '设置时区为北京时间'
+        run: |
+          sudo timedatectl set-timezone Asia/Shanghai || true
+          echo "当前时间: $(date)"
+
+      - name: '安装依赖'
+        run: |
+          pip install --upgrade pip
+          pip install requests==2.26.0
+          pip install openpyxl==3.1.2
+
+      - name: '下载所有结果文件'
+        uses: actions/download-artifact@v8
+        with:
+          path: ./artifacts
+          pattern: jlc_result_*.json
+
+      - name: '移动结果文件到工作目录'
+        run: |
+          echo "下载的artifacts内容:"
+          ls -la ./artifacts/
+          
+          # 移动所有结果文件到当前目录 (增加 -type f 限定只移动文件)
+          find ./artifacts -type f -name "jlc_result_*.json" -exec mv {} . \; 2>/dev/null || true
+          
+          echo "工作目录中的结果文件:"
+          ls -la jlc_result_*.json 2>/dev/null || echo "未找到结果文件"
+
+      - name: '运行汇总脚本'
+        run: |
+          python ./statistics_summary.py
+
+      - name: '获取并修改生成的Excel文件名'
+        id: get-excel
+        run: |
+          excel_file=$(ls *.xlsx 2>/dev/null | head -1)
+          if [ -n "$excel_file" ]; then
+            date_str=$(date +%Y%m%d)
+            new_name="${date_str}_jlc_gold_beans_ranking.xlsx"
+            mv "$excel_file" "$new_name"
+            echo "excel_file=$new_name" >> $GITHUB_OUTPUT
+            echo "重命名: $excel_file -> $new_name"
+          else
+            echo "未找到Excel文件"
+            echo "excel_file=" >> $GITHUB_OUTPUT
+          fi
+
+      - name: '上传金豆排名Excel'
+        if: steps.get-excel.outputs.excel_file != ''
+        uses: actions/upload-artifact@v7
+        with:
+          path: ${{ steps.get-excel.outputs.excel_file }}
+          if-no-files-found: ignore
+          archive: false
+          retention-days: 5
+
+      - name: '清理 GitHub 界面的临时 JSON Artifacts'
+        uses: geekyeggo/delete-artifact@v6
+        with:
+          name: |
+            jlc_result_*
+          useGlob: true
