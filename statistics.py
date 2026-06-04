@@ -332,7 +332,7 @@ class JLCClient:
     
     def get_user_info(self):
         """获取用户信息"""
-        log(f"账号 {self.account_index} - 获取用户信息 (不使用代理)...")
+        log(f"账号 {self.account_index} - 获取用户信息...")
         url = f"{self.base_url}/api/appPlatform/center/setting/selectPersonalInfo"
         
         max_retries = 5
@@ -376,7 +376,7 @@ class JLCClient:
     
     def get_points(self):
         """获取金豆数量"""
-        log(f"账号 {self.account_index} - 获取金豆数量 (不使用代理)...")
+        log(f"账号 {self.account_index} - 获取金豆数量...")
         url = f"{self.base_url}/api/activity/front/getCustomerIntegral"
         
         max_retries = 5
@@ -827,7 +827,7 @@ def query_account(username, password, account_index, total_accounts, retry_count
             
             for login_attempt in range(max_login_retries):
                 try:
-                    log(f"账号 {account_index} - 正在发起登录请求 (代理: {'已启用' if current_proxies else '未启用'}) (尝试 {login_attempt + 1}/{max_login_retries})...")
+                    log(f"账号 {account_index} - 正在发起登录请求 (代理: {'启用' if current_proxies else '未启用'}) (尝试 {login_attempt + 1}/{max_login_retries})...")
                     
                     # 按照抓包格式，优先使用 multipart/form-data 模拟发送
                     m_files = {'code': (None, auth_code)}

@@ -134,7 +134,7 @@ jobs:
           Xvfb :99 -screen 0 1024x768x24 &
           echo "DISPLAY=:99" >> $GITHUB_ENV
         
-      - name: '运行签到脚本'
+      - name: '运行查询脚本'
         env:
           DISPLAY: ':99'
         run: |
@@ -157,7 +157,7 @@ jobs:
           archive: false
           retention-days: 5
 
-      - name: '上传结果文件供汇总'
+      - name: '上传查询结果文件供汇总'
         if: always()
         uses: actions/upload-artifact@v7
         with:
