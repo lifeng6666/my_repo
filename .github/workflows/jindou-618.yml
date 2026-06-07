@@ -1,0 +1,264 @@
+name: 嘉立创金豆查询-618临时自动推送版
+
+on:
+  workflow_dispatch: 
+    inputs:
+      accounts:
+        description: '账号列表 (多个账号请用英文逗号 , 分隔)'
+        required: false
+        type: string
+      passwords:
+        description: '密码列表 (多个密码请用英文逗号 , 分隔，需与账号一一对应)'
+        required: false
+        type: string
+  schedule:
+    - cron: '0 4 * * *'
+
+env:
+  # 设置时区为北京时间
+  TZ: Asia/Shanghai
+
+jobs:
+  # ==================================================================================
+  # 数据预处理
+  # ==================================================================================
+  generate-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: 解析账号并分组
+        id: set-matrix
+        env:
+          ACCOUNTS_INPUT: ${{ inputs.accounts }}
+          PASSWORDS_INPUT: ${{ inputs.passwords }}
+          HARDCODED_ACCOUNTS: '12112588A,12112597A,12112618A,12112627A,12112669A,12118785A,12119058A,12119161A,12119343A,12138576A,12138802A,12139171A,12139557A,12139857A,12140113A,12140445A,12140773A,12140913A,12141133A,12147712A,12147796A,12147868A,12147979A,12148050A,12148110A,12148158A,12148197A,12148308A,12148356A,12162994A,12163059A,12163129A,12163173A,12163266A,12163344A,12163392A,12163468A,12163542A,12163603A,12170242A,12170277A,12170307A,12170335A,12170371A,12170397A,12170431A,12170467A,12170493A,12170524A,12172089A,12172161A,12172189A,12172275A,12172314A,12172347A,12172372A,12172417A,12172449A,12172504A,12172546A,12172597A,12172647A,12172698A,12172749A,12172813A,12172873A,12172929A,12172966A,12173001A,12177792A,12177862A,12177903A,12178029A,12178110A,12178177A,12178207A,12178308A,12187092A,12187176A,12187236A,12187299A,12187399A,12187521A,12187590A,12187704A,12187803A,12187873A,12187978A,12188049A,12188136A,12188218A,12188269A,12188356A,12188436A,12188493A,12188562A,12188652A,12188683A,12188776A,12188884A,12188962A,12189009A,12209448A,12209536A,12209712A,12209841A,12210034A,12210165A,12210277A,12210360A,12218815A,12219015A,12219118A,12219192A,12219294A,12225186A,12225259A,12225367A,12225460A,12225597A,12225759A,12225853A,12225934A,12226071A,12226210A,12226983A,12227191A,12227332A,12227478A,12227644A,12226366A,12226435A,12226509A,12226647A,12226786A,12226890A,12227010A,12227271A,12227403A,12227511A,12227610A,12227686A,12227763A,12227859A,12227950A,12228006A,12228055A,12228168A,12228252A,12228309A,12228423A,12228502A,12228565A,12228657A,12228778A,12228865A,12228909A,12228969A,12229059A,12229122A,12229204A,12229273A,12229326A,12229374A,12229440A,12229558A,12229708A,12229836A,12229918A,12230046A,12234418A,12241078A,12241276A,12241384A,12241555A,12241663A,12241930A,12242035A,12242115A,12242209A,12242335A,12244554A,12244638A,12244720A,12244945A,12245122A,12244507A,12244633A,12244731A,12244956A,12245076A,12245286A,12245421A,12245635A,12245797A,12245938A,12246075A,12246204A,12246330A,12246466A,12246574A,12246636A,12246870A,12246949A,12247026A,12247072A,12253554A,12255870A,12255994A,12256140A,12256323A,12256419A,12256540A,12256726A,12256806A,12256906A,12257008A,12257091A,12257163A,12257251A,12257331A,12257421A,12257538A,12257628A,12257794A,12257901A,12257959A,12385420A,12385630A,12385695A,12385858A,12385921A,12386044A,12386164A,12386493A,12386664A,12386859A,12387091A,12387226A,12387343A,12387391A,12387477A,12387541A,12387616A,12387688A,12387759A,12387828A,12387885A,12387987A,12388056A,12388135A,12388195A,12388264A,12388467A,12388590A,12388743A,12388852A,12388960A,12389077A,12389197A,12389331A,12389487A,12389595A,12389725A,12390040A,12390219A,12390408A,12390577A,12390717A,12390847A,12390984A,12391117A,12391191A,12391279A,12391404A,12391533A,12391662A,12391720A,12391783A,12391885A,12392004A,12392137A,12392244A,12392326A,12392400A,12392494A,12392688A,12392820A,12392980A,12393112A,12393189A,12393324A,12393433A,12393594A,12393715A,12393805A,12393930A,12394029A,12394294A,12394387A,12394515A,12394576A,12394641A,12394716A,12394812A,12394914A,12394971A,12394996A,12395068A,12395089A,12395115A,12395133A,12395164A,12395194A,12395215A,12395233A,12395247A,12397990A,12398071A,12398149A,12398218A,12398280A,12398332A,12398395A,12398482A,12398550A,12398647A,12398737A,12399025A,12399133A,12399241A,12399367A,12399477A,12399619A,12399736A,12399858A,12399981A,12400242A,12400380A,12400464A,12400594A,12400755A,12400918A,12401188A,12401271A,12401442A,12401544A,12401626A,12401722A,12401838A,12401958A,12402028A,12402148A,12402220A,12402294A,12402382A,12402507A,12402568A,12402627A,12402730A,12402832A,12402960A,12403072A,12403167A,12403261A,12403318A,12403425A,12403626A,12403791A,12403833A,12403983A,12404106A,12404175A,12483792A,12540159A,12547986A,12548041A,12575932A,12708396A,12712369A,12727054A,12727102A,12727230A,12727311A,12727413A,12732601A,12732631A,12732669A,12732687A,12732721A,12732738A,12732774A,12732807A,12732829A,12732849A,12732886A,12732906A,12732925A,12732951A,12732960A,12732978A,12732999A,12733008A,12733044A,12733060A,12739846A,12739951A,12740002A,12740037A,12740071A,12742873A,12742891A,12742918A,12742938A,12742956A,12742981A,12743016A,12743032A,12743056A,12743095A,12743116A,12743173A,12743196A,12743215A,12743275A,12743344A,12743374A,12743394A,12743433A,12743472A'
+          HARDCODED_PASSWORDS: 'jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,Ss123123,Ss123123,Ss123123,Ss123123,Ss123123,Ss123123,Ss123123,Ss123123,Ss123123,Ss123123,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc123123,jlc123123,jlc123123,jlc123123,jlc123123,jlc123123,jlc123123,jlc123123,jlc123123,jlc123123,jlc123123,jlc123123,jlc123123,jlc123123,jlc123123,jlc123123,jlc123123,jlc123123,jlc123123,jlc123123,jlc123123,jlc123123,jlc123123,jlc123123,jlc123123,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,jlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc476743,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123,JLCjlc123123' 
+        shell: python
+        run: |
+          import os
+          import json
+          import math
+          import sys
+
+          accounts_str = os.environ.get('ACCOUNTS_INPUT', '').strip() or os.environ.get('HARDCODED_ACCOUNTS', '')
+          passwords_str = os.environ.get('PASSWORDS_INPUT', '').strip() or os.environ.get('HARDCODED_PASSWORDS', '')
+          
+          accounts = [x.strip() for x in accounts_str.split(',') if x.strip()]
+          passwords = [x.strip() for x in passwords_str.split(',') if x.strip()]
+
+          print(f"Total valid accounts found: {len(accounts)}")
+          print(f"Total valid passwords found: {len(passwords)}")
+
+          if len(accounts) != len(passwords):
+              print("::error::输入的账号数量与密码数量不一致！工作流将被终止。")
+              sys.exit(1)
+
+          if len(accounts) == 0:
+              print("::error::未提供有效的账号！")
+              sys.exit(1)
+
+          account_pairs = list(zip(accounts, passwords))
+
+          chunk_size = 50
+          chunks = []
+          total_chunks = math.ceil(len(account_pairs) / chunk_size)
+
+          for i in range(total_chunks):
+              batch = account_pairs[i*chunk_size : (i+1)*chunk_size]
+              users_str = ",".join([x[0] for x in batch])
+              pwds_str = ",".join([x[1] for x in batch])
+              
+              chunks.append({
+                  "index": i + 1,
+                  "users": users_str,
+                  "pwds": pwds_str
+              })
+
+          matrix_json = json.dumps(chunks)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f"matrix={matrix_json}\n")
+
+  # ==================================================================================
+  # 执行签到
+  # ==================================================================================
+  signin-process:
+    needs: generate-matrix
+    runs-on: ubuntu-22.04
+    strategy:
+      max-parallel: 10
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.generate-matrix.outputs.matrix) }}
+
+    name: 账号组${{ matrix.index }}
+
+    steps:
+      - name: '检出代码'
+        uses: actions/checkout@v6
+
+      # --- 环境配置部分  ---
+      - name: '设置Python环境'
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+
+      - name: '设置Node.js环境'
+        uses: actions/setup-node@v6
+        with:
+          node-version: '18'
+
+      - name: '设置时区为北京时间'
+        run: |
+          sudo timedatectl set-timezone Asia/Shanghai || true
+          echo "当前时间: $(date)"
+
+      - name: '安装依赖'
+        run: |
+          pip install --upgrade pip
+          pip install requests==2.26.0
+          pip install lxml==4.6.5
+          pip install selenium==3.141.0
+          pip install retrying==1.3.3
+          pip install wheel==0.37.1
+          pip install serverchan_sdk==1.0.6
+          pip install PyExecJS
+          pip install DrissionPage DataRecorder DownloadKit
+
+      - name: '准备Chrome驱动'
+        uses: nanasess/setup-chromedriver@v2
+
+      - name: '安装Xvfb虚拟显示器'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+
+      - name: '启动虚拟显示器'
+        run: |
+          Xvfb :99 -screen 0 1024x768x24 &
+          echo "DISPLAY=:99" >> $GITHUB_ENV
+        
+      - name: '运行查询脚本'
+        env:
+          DISPLAY: ':99'
+        run: |
+          echo "正在运行第 ${{ matrix.index }} 组账号..."
+          python ./statistics.py "${{ matrix.users }}" "${{ matrix.pwds }}" "true" "${{ matrix.index }}"
+
+      - name: '重命名结果文件'
+        if: always()
+        run: |
+          if [ -f password-changed.txt ]; then
+            mv password-changed.txt "password_changed_group${{ matrix.index }}.txt"
+          fi
+
+      - name: '上传密码修改记录'
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          path: password_changed_group${{ matrix.index }}.txt
+          if-no-files-found: ignore
+          archive: false
+          retention-days: 5
+
+      - name: '上传查询结果文件供汇总'
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          path: jlc_result_${{ matrix.index }}.json
+          if-no-files-found: ignore
+          archive: false
+          retention-days: 1
+
+  # ==================================================================================
+  # 汇总所有账号组结果
+  # ==================================================================================
+  summary:
+    needs: signin-process
+    runs-on: ubuntu-latest
+    if: always()
+
+    # 注入环境变量（用于推送）
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      WECHAT_WEBHOOK_KEY: ${{ secrets.WECHAT_WEBHOOK_KEY }}
+      DINGTALK_WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
+      PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+      SERVERCHAN_SCKEY: ${{ secrets.SERVERCHAN_SCKEY }}
+      SERVERCHAN3_SCKEY: ${{ secrets.SERVERCHAN3_SCKEY }}
+      COOLPUSH_SKEY: ${{ secrets.COOLPUSH_SKEY }}
+      CUSTOM_WEBHOOK: ${{ secrets.CUSTOM_WEBHOOK }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: '检出代码'
+        uses: actions/checkout@v6
+
+      - name: '设置Python环境'
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+
+      - name: '设置时区为北京时间'
+        run: |
+          sudo timedatectl set-timezone Asia/Shanghai || true
+          echo "当前时间: $(date)"
+
+      - name: '安装依赖'
+        run: |
+          pip install --upgrade pip
+          pip install requests==2.26.0
+          pip install openpyxl==3.1.2
+
+      - name: '下载所有结果文件'
+        uses: actions/download-artifact@v8
+        with:
+          path: ./artifacts
+          pattern: jlc_result_*.json
+
+      - name: '移动结果文件到工作目录'
+        run: |
+          echo "下载的artifacts内容:"
+          ls -la ./artifacts/
+          
+          # 移动所有结果文件到当前目录 (增加 -type f 限定只移动文件)
+          find ./artifacts -type f -name "jlc_result_*.json" -exec mv {} . \; 2>/dev/null || true
+          
+          echo "工作目录中的结果文件:"
+          ls -la jlc_result_*.json 2>/dev/null || echo "未找到结果文件"
+
+      - name: '运行汇总脚本'
+        run: |
+          python ./statistics_summary.py
+
+      - name: '获取并修改生成的Excel文件名'
+        id: get-excel
+        run: |
+          excel_file=$(ls *.xlsx 2>/dev/null | head -1)
+          if [ -n "$excel_file" ]; then
+            date_str=$(date +%Y%m%d)
+            new_name="${date_str}_jlc_gold_beans_ranking.xlsx"
+            mv "$excel_file" "$new_name"
+            echo "excel_file=$new_name" >> $GITHUB_OUTPUT
+            echo "重命名: $excel_file -> $new_name"
+          else
+            echo "未找到Excel文件"
+            echo "excel_file=" >> $GITHUB_OUTPUT
+          fi
+
+      - name: '上传金豆排名Excel'
+        if: steps.get-excel.outputs.excel_file != ''
+        uses: actions/upload-artifact@v7
+        with:
+          path: ${{ steps.get-excel.outputs.excel_file }}
+          if-no-files-found: ignore
+          archive: false
+          retention-days: 5
+
+      - name: '清理 GitHub 界面的临时 JSON Artifacts'
+        uses: geekyeggo/delete-artifact@v6
+        with:
+          name: |
+            jlc_result_*
+          useGlob: true
