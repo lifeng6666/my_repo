@@ -50,7 +50,9 @@ def desensitize_password(pwd):
 def ensure_proxy_whitelist():
     """预检代理IP白名单状态，避免首次获取代理时阻塞导致 authCode 失效"""
     log("正在预检代理IP白名单状态...")
-    proxy_api_url = "http://api.dmdaili.com/dmgetip.asp?apikey=b345ad7e&pwd=bca1fcb138fb91448d9cfe7f1099c6f6&getnum=1&httptype=1&geshi=2&fenge=1&fengefu=&operate=all"
+    apikey = os.getenv('DM_APIKEY')
+    pwd = os.getenv('DM_PWD')
+    proxy_api_url = f"http://api.dmdaili.com/dmgetip.asp?apikey={apikey}&pwd={pwd}&getnum=1&httptype=1&geshi=2&fenge=1&fengefu=&operate=all"
     
     for _ in range(3):
         try:
@@ -181,7 +183,9 @@ def extract_secretkey_from_browser(driver):
 
 def get_valid_proxy(account_index):
     global disable_global_proxy, consecutive_proxy_fails
-    proxy_api_url = "http://api.dmdaili.com/dmgetip.asp?apikey=b345ad7e&pwd=bca1fcb138fb91448d9cfe7f1099c6f6&getnum=1&httptype=1&geshi=2&fenge=1&fengefu=&operate=all"
+    apikey = os.getenv('DM_APIKEY')
+    pwd = os.getenv('DM_PWD')
+    proxy_api_url = f"http://api.dmdaili.com/dmgetip.asp?apikey={apikey}&pwd={pwd}&getnum=1&httptype=1&geshi=2&fenge=1&fengefu=&operate=all"
     max_attempts = 100
     attempt = 0
     
