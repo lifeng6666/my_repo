@@ -24,6 +24,10 @@ on:
         type: string
         default: ''
 
+env:
+  DM_APIKEY: ${{ secrets.DM_APIKEY }}
+  DM_PWD: ${{ secrets.DM_PWD }}
+
 jobs:
   # Job 1: 预处理阶段 - 校验输入并动态生成矩阵分配计划
   setup_matrix:
