@@ -21,7 +21,9 @@ proxy = None
 
 def get_valid_proxy():
     """获取代理IP"""
-    proxy_api_url = "http://api.dmdaili.com/dmgetip.asp?apikey=b345ad7e&pwd=bca1fcb138fb91448d9cfe7f1099c6f6&getnum=1&httptype=1&geshi=2&fenge=1&fengefu=&operate=all"
+    apikey = os.getenv('DM_APIKEY')
+    pwd = os.getenv('DM_PWD')
+    proxy_api_url = f"http://api.dmdaili.com/dmgetip.asp?apikey={apikey}&pwd={pwd}&getnum=1&httptype=1&geshi=2&fenge=1&fengefu=&operate=all"
     max_attempts = 100
     attempt = 0
     
