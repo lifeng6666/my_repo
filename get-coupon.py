@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
@@ -63,6 +64,10 @@ def create_chrome_driver(user_data_dir=None):
 
     if user_data_dir:
         chrome_options.add_argument(f"--user-data-dir={user_data_dir}")
+
+    # chromedriver_path = 'chromedriver.exe'
+    # service = Service(executable_path=chromedriver_path)
+    # driver = webdriver.Chrome(service=service, options=chrome_options)
 
     driver = webdriver.Chrome(options=chrome_options)
 
@@ -694,8 +699,8 @@ def claim_3dp_material(driver, coupon_result):
 
 
 def claim_invite_coupon(driver, coupon_result, invite_link):
-    """三、邀请免运优惠券"""
-    coupon_name = "邀请免运优惠券"
+    """三、被邀请者优惠券"""
+    coupon_name = "被邀请者优惠券"
     
     if not invite_link:
         coupon_result[coupon_name] = {'success': False, 'reason': '未填写邀请链接，跳过'}
@@ -728,7 +733,7 @@ def claim_invite_coupon(driver, coupon_result, invite_link):
     else:
         log(f"⚠ 未获取到 Secretkey，仍将尝试发包...")
 
-    get_id_url = "https://www.jlc-3dp.cn/3dp/coupon/getReceiveCouponId"
+    get_id_url = "https://www.jlc-3dp.cn/3dp/coupon/getActivityCouponDetail"
     get_id_body = json.dumps({"operationPromotionEnum": "USER_INVITATION_COUPON_2025_12"})
     
     bind_url = "https://www.jlc-3dp.cn/3dp/UserInvitationWebController/bindUserInvitationRelation"
@@ -754,9 +759,9 @@ def claim_invite_coupon(driver, coupon_result, invite_link):
         
         # 1. 获取券ID
         id_res = send_coupon_request(driver, get_id_url, get_id_body, 'application/json', secret_key)
-        if id_res and id_res.get('success') and id_res.get('data') and len(id_res.get('data')) >= 2:
-            all_ids = id_res['data']
-            coupon_id = all_ids[1]
+        if id_res and id_res.get('success') and id_res.get('data'):
+            # all_ids = id_res['data']
+            coupon_id = id_res.get('data').get('couponVOList')[0].get('couponId')
 
         # 2. 绑定邀请关系
         send_coupon_request(driver, bind_url, bind_body, 'application/json', secret_key)
@@ -780,7 +785,7 @@ def claim_invite_coupon(driver, coupon_result, invite_link):
         message = response.get('message') or ''
 
         if success == True and code == 200:
-            success_msg = "邀请免运优惠券领取成功，已绑定邀请账号"
+            success_msg = f"被邀请者优惠券领取成功，已绑定邀请账号"
             log(f"✅ {success_msg}")
             coupon_result[coupon_name] = {'success': True, 'reason': success_msg}
             return
@@ -899,7 +904,7 @@ def process_single_account(username, password, account_index, total_accounts, in
     coupon_names_ordered = [
         "3D打印30-20券",
         "3D打印高值材料券",
-        "邀请免运优惠券",
+        "被邀请者优惠券",
         "FPC新客免费打样券",
         "FPC 100元优惠券"
     ]
@@ -944,7 +949,7 @@ def process_single_account(username, password, account_index, total_accounts, in
             if not coupon_result["3D打印高值材料券"].get('success') and "3D打印高值材料券" not in skip_coupons_list:
                 claim_3dp_material(driver, coupon_result)
 
-            if not coupon_result["邀请免运优惠券"].get('success') and "邀请免运优惠券" not in skip_coupons_list:
+            if not coupon_result["被邀请者优惠券"].get('success') and "被邀请者优惠券" not in skip_coupons_list:
                 claim_invite_coupon(driver, coupon_result, invite_link)
                 
             need_fpc1 = not coupon_result["FPC新客免费打样券"].get('success') and "FPC新客免费打样券" not in skip_coupons_list
@@ -992,7 +997,7 @@ def main():
     id_to_name = {
         "1": "3D打印30-20券",
         "2": "3D打印高值材料券",
-        "3": "邀请免运优惠券",
+        "3": "被邀请者优惠券",
         "4": "FPC新客免费打样券",
         "5": "FPC 100元优惠券"
     }
@@ -1022,7 +1027,7 @@ def main():
     coupon_names_ordered = [
         "3D打印30-20券",
         "3D打印高值材料券",
-        "邀请免运优惠券",
+        "被邀请者优惠券",
         "FPC新客免费打样券",
         "FPC 100元优惠券"
     ]

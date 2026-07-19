@@ -10,11 +10,11 @@ on:
         description: '密码组（英文逗号分隔，必须与账号对应）'
         required: true
       invite_link:
-        description: '邀请链接（选填，不填则跳过领取邀请免邮券绑定邀请账号）'
+        description: '邀请链接（选填，不填则跳过领取被邀请者优惠券绑定邀请账号）'
         required: false
         default: ''
       skip_coupons:
-        description: '不领取的券序号(1:30-20券 2:高值材料券 3:邀请绑定&免运券 4:FPC免费券 5:FPC100元券)，多个序号用英文逗号隔开'
+        description: '不领取的券序号(1:30-20券 2:高值材料券 3:被邀请者优惠券 4:FPC免费券 5:FPC100元券)，多个序号用英文逗号隔开'
         required: false
         default: ''
 
