@@ -23,8 +23,11 @@ on:
         required: false
         type: string
         default: ''
-
 env:
+  HZM_ACCOUNT: ${{ secrets.HZM_ACCOUNT }}
+  HZM_PASSWORD: ${{ secrets.HZM_PASSWORD }}
+  EMAIL_ACCOUNT: ${{ secrets.EMAIL_ACCOUNT }}
+  EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
   DM_APIKEY: ${{ secrets.DM_APIKEY }}
   DM_PWD: ${{ secrets.DM_PWD }}
 

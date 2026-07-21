@@ -1,6 +1,0 @@
-API账号:7f690de5fc0d67dca57454d00bfe325750c735254a95bce36d3e1b9e84acc8b3
-API密码:7f690de5fc0d67dc4f8764f826795b6a3418c6b19738d23c5921060810d0571c
-服务器地址:api.haozhuma.com
-项目ID:21571
-邮箱:sorenhugo1@gmail.com
-邮箱密码:nzjpdeiwdvotzref

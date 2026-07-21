@@ -52,7 +52,7 @@ def ensure_proxy_whitelist():
     log("正在预检代理IP白名单状态...")
     apikey = os.getenv('DM_APIKEY')
     pwd = os.getenv('DM_PWD')
-    proxy_api_url = f"http://api.dmdaili.com/dmgetip.asp?apikey={apikey}&pwd={pwd}&getnum=1&httptype=1&geshi=2&fenge=1&fengefu=&operate=all"
+    proxy_api_url = f"http://need1.dmdaili.com:7771/dmgetip.asp?apikey={apikey}&pwd={pwd}&getnum=1&httptype=1&geshi=2&fenge=1&fengefu=&operate=all"
     
     for _ in range(3):
         try:
@@ -185,7 +185,7 @@ def get_valid_proxy(account_index):
     global disable_global_proxy, consecutive_proxy_fails
     apikey = os.getenv('DM_APIKEY')
     pwd = os.getenv('DM_PWD')
-    proxy_api_url = f"http://api.dmdaili.com/dmgetip.asp?apikey={apikey}&pwd={pwd}&getnum=1&httptype=1&geshi=2&fenge=1&fengefu=&operate=all"
+    proxy_api_url = f"http://need1.dmdaili.com:7771/dmgetip.asp?apikey={apikey}&pwd={pwd}&getnum=1&httptype=1&geshi=2&fenge=1&fengefu=&operate=all"
     max_attempts = 100
     attempt = 0
     

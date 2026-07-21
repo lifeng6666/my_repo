@@ -34,18 +34,12 @@ def log(msg):
 
 def read_config():
     config = {}
-    config_path = "config.txt"
-    if not os.path.exists(config_path):
-        log(f"❌ 找不到配置文件: {config_path}")
-        sys.exit(1)
     
-    with open(config_path, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line or ":" not in line:
-                continue
-            key, val = line.split(":", 1)
-            config[key.strip()] = val.strip()
+    config["API账号"] = os.getenv('HZM_ACCOUNT')
+    config["API密码"] = os.getenv('HZM_PASSWORD')
+    config["服务器地址"] = "api.haozhuma.com"
+    config["项目ID"] = "21571"
+    
     return config
 
 def force_kill_driver(driver):
@@ -222,7 +216,7 @@ class HaoZhuMa:
 def get_valid_proxy(timeout=None):
     apikey = os.getenv('DM_APIKEY')
     pwd = os.getenv('DM_PWD')
-    api_url = f"http://api.dmdaili.com/dmgetip.asp?apikey={apikey}&pwd={pwd}&getnum=1&httptype=1&geshi=2&fenge=1&fengefu=&operate=all"
+    api_url = f"http://need1.dmdaili.com:7771/dmgetip.asp?apikey={apikey}&pwd={pwd}&getnum=1&httptype=1&geshi=2&fenge=1&fengefu=&operate=all"
     start_time = time.time()
     
     while True:

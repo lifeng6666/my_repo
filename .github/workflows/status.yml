@@ -14,10 +14,7 @@ on:
         required: false
         default: ''
 
-
 env:
-  # 设置时区为北京时间
-  TZ: Asia/Shanghai
   DM_APIKEY: ${{ secrets.DM_APIKEY }}
   DM_PWD: ${{ secrets.DM_PWD }}
 
