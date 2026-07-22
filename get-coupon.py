@@ -891,6 +891,64 @@ def claim_fpc_coupons(driver, coupon_result, skip_coupons_list=None):
             log(f"❌ {coupon_name}领取失败（已达最大重试次数）")
             coupon_result[coupon_name] = {'success': False, 'reason': last_message or '重试后仍失败'}
 
+def claim_3dp_10(driver, coupon_result):
+    """一、3D打印万份礼品活动专用券"""
+    coupon_name = "3D打印万份礼品活动专用券"
+    api_url = "https://www.jlc-3dp.cn/3dp/coupon/receiveCouponsV2"
+    body = json.dumps({
+        "operationPromotionEnum": "GOODS_MARKET_COUPON_2026_6",
+        "couponIdList": ["9F0C0D9DE6F37F2A8E437E2FA0697EA100C48DB62C78334B"]
+    })
+
+    log(f"🎫 === 开始领取{coupon_name} ===")
+
+    clear_performance_logs(driver)
+    navigate_3dp_via_passport(driver)
+    secret_key = extract_secretkey_from_logs(driver)
+
+    if secret_key:
+        log(f"✅ 成功获取 Secretkey")
+    else:
+        log(f"⚠ 未获取到 Secretkey，仍将尝试发包...")
+
+    last_message = None
+
+    for attempt in range(3):
+        if attempt > 0:
+            log(f"⏳ 刷新页面等待10秒后第 {attempt + 1} 次重试...")
+            clear_performance_logs(driver)
+            refresh_page_and_wait(driver)
+            new_key = extract_secretkey_from_logs(driver)
+            if new_key:
+                secret_key = new_key
+                log(f"✅ 重新获取 Secretkey 成功")
+
+        response = send_coupon_request(driver, api_url, body, 'application/json', secret_key)
+
+        if response is None or '_fetch_error' in response:
+            err = response.get('_fetch_error', '请求失败') if response else '请求失败'
+            log(f"⚠ 请求异常: {err}")
+            last_message = err
+            continue
+
+        success = response.get('success')
+        code = response.get('code')
+        message = response.get('message') or ''
+
+        if success == True and code == 200:
+            log(f"✅ {coupon_name}领取成功")
+            coupon_result[coupon_name] = {'success': True}
+            return
+
+        # 只要接口有返回业务响应结果但不是领取成功，就不需要再盲目重试，直接跳过并记录失败原因
+        reason = message if message else json.dumps(response, ensure_ascii=False)[:100]
+        log(f"⚠ {coupon_name}: {reason}")
+        coupon_result[coupon_name] = {'success': False, 'reason': reason}
+        return
+
+    log(f"❌ {coupon_name}领取失败（已达最大重试次数）")
+    coupon_result[coupon_name] = {'success': False, 'reason': last_message or '重试后仍失败'}
+
 
 # =====================================================================
 #  单账号处理 & 主函数
@@ -906,7 +964,8 @@ def process_single_account(username, password, account_index, total_accounts, in
         "3D打印高值材料券",
         "被邀请者优惠券",
         "FPC新客免费打样券",
-        "FPC 100元优惠券"
+        "FPC 100元优惠券",
+        "万份礼品活动专用券"
     ]
     coupon_result = {}
     for name in coupon_names_ordered:
@@ -958,6 +1017,9 @@ def process_single_account(username, password, account_index, total_accounts, in
             if need_fpc1 or need_fpc2:
                 claim_fpc_coupons(driver, coupon_result, skip_coupons_list)
 
+            if not coupon_result["万份礼品活动专用券"].get('success') and "万份礼品活动专用券" not in skip_coupons_list:
+                claim_3dp_10(driver, coupon_result)
+
         except Exception as e:
             log(f"❌ 账号处理异常: {e}")
             success_this_round = False
@@ -999,7 +1061,8 @@ def main():
         "2": "3D打印高值材料券",
         "3": "被邀请者优惠券",
         "4": "FPC新客免费打样券",
-        "5": "FPC 100元优惠券"
+        "5": "FPC 100元优惠券",
+        "6": "万份礼品活动专用券"
     }
     skip_coupons_list =[id_to_name[sid] for sid in skip_ids if sid in id_to_name]
 
@@ -1029,7 +1092,8 @@ def main():
         "3D打印高值材料券",
         "被邀请者优惠券",
         "FPC新客免费打样券",
-        "FPC 100元优惠券"
+        "FPC 100元优惠券",
+        "万份礼品活动专用券"
     ]
 
     log(f"{'='*50}", show_time=False)

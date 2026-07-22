@@ -14,8 +14,8 @@ on:
         required: false
         default: ''
       skip_coupons:
-        description: '不领取的券序号(1:30-20券 2:高值材料券 3:被邀请者优惠券 4:FPC免费券 5:FPC100元券)，多个序号用英文逗号隔开'
-        required: false
+        description: '不领取的券序号(1:30-20券 2:高值材料券 3:被邀请者优惠券 4:FPC免费券 5:FPC100元券 6:3D打印万份礼品活动专用券)，多个序号用英文逗号隔开'
+        required: false 
         default: ''
 
 env:
