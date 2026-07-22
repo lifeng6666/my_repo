@@ -892,8 +892,8 @@ def claim_fpc_coupons(driver, coupon_result, skip_coupons_list=None):
             coupon_result[coupon_name] = {'success': False, 'reason': last_message or '重试后仍失败'}
 
 def claim_3dp_10(driver, coupon_result):
-    """一、3D打印万份礼品活动专用券"""
-    coupon_name = "3D打印万份礼品活动专用券"
+    """一、万份礼品活动专用券"""
+    coupon_name = "万份礼品活动专用券"
     api_url = "https://www.jlc-3dp.cn/3dp/coupon/receiveCouponsV2"
     body = json.dumps({
         "operationPromotionEnum": "GOODS_MARKET_COUPON_2026_6",
