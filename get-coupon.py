@@ -38,7 +38,14 @@ def is_on_3dp_site(url):
     except:
         return False
 
-
+def is_on_zh_site(url):
+    """检查 URL 的域名是否为 jlc-zh"""
+    try:
+        hostname = urlparse(url).hostname or ''
+        return hostname.endswith('jlc-zh.com')
+    except:
+        return False
+        
 # =====================================================================
 #  浏览器创建
 # =====================================================================
@@ -571,6 +578,56 @@ def navigate_3dp_via_passport(driver):
     log("⏳ 等待页面资源加载 (10s)...")
     time.sleep(10)
 
+def navigate_zh_via_passport(driver):
+
+    passport_url = ("https://www.jlc-zh.com/free-sample?spm=JLC.MEMBER")
+
+    log(f"🔗 打开纸盒券领取页面...")
+    try:
+        driver.get(passport_url)
+    except TimeoutException:
+        log("⚠ 页面加载超时，停止加载继续...")
+        try:
+            driver.execute_script("window.stop();")
+        except:
+            pass
+
+    log("🔍 等待纸盒券领取页面...")
+    try:
+        WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+    except:
+        pass
+    time.sleep(5)
+
+    start_time = time.time()
+    max_wait = 60
+
+    while time.time() - start_time < max_wait:
+        current_url = driver.current_url
+
+        if is_on_zh_site(current_url):
+            log(f"✅ 已到达目标页面: {current_url.split('?')[0]}")
+            break
+
+        time.sleep(1)
+
+    final_url = driver.current_url
+    if is_on_zh_site(final_url):
+        log(f"✅ 成功到达领券页面: {final_url.split('?')[0]}")
+    else:
+        log(f"⚠ 未能到达领券页面，当前URL: {final_url.split('?')[0]}")
+        log("⚠ 尝试直接打开目标页面...")
+        target_url = "https://www.jlc-zh.com/free-sample?spm=JLC.MEMBER"
+        try:
+            driver.get(target_url)
+        except TimeoutException:
+            try:
+                driver.execute_script("window.stop();")
+            except:
+                pass
+
+    log("⏳ 等待页面资源加载 (10s)...")
+    time.sleep(10)
 
 # =====================================================================
 #  优惠券领取逻辑
@@ -634,7 +691,6 @@ def claim_3dp_30_20(driver, coupon_result):
     log(f"❌ {coupon_name}领取失败（已达最大重试次数）")
     coupon_result[coupon_name] = {'success': False, 'reason': last_message or '重试后仍失败'}
 
-
 def claim_3dp_material(driver, coupon_result):
     """二、3D打印高值材料券"""
     coupon_name = "3D打印高值材料券"
@@ -696,7 +752,6 @@ def claim_3dp_material(driver, coupon_result):
 
     log(f"❌ {coupon_name}领取失败（已达最大重试次数）")
     coupon_result[coupon_name] = {'success': False, 'reason': last_message or '重试后仍失败'}
-
 
 def claim_invite_coupon(driver, coupon_result, invite_link):
     """三、被邀请者优惠券"""
@@ -812,7 +867,6 @@ def claim_invite_coupon(driver, coupon_result, invite_link):
     log(f"❌ {coupon_name}领取失败（已达最大重试次数）")
     coupon_result[coupon_name] = {'success': False, 'reason': last_message or '重试后仍失败'}
 
-
 def claim_fpc_coupons(driver, coupon_result, skip_coupons_list=None):
     if skip_coupons_list is None:
         skip_coupons_list =[]
@@ -891,19 +945,20 @@ def claim_fpc_coupons(driver, coupon_result, skip_coupons_list=None):
             log(f"❌ {coupon_name}领取失败（已达最大重试次数）")
             coupon_result[coupon_name] = {'success': False, 'reason': last_message or '重试后仍失败'}
 
-def claim_3dp_10(driver, coupon_result):
-    """一、万份礼品活动专用券"""
-    coupon_name = "万份礼品活动专用券"
-    api_url = "https://www.jlc-3dp.cn/3dp/coupon/receiveCouponsV2"
+def claim_zh_free(driver, coupon_result):
+    """六、纸盒免费打样券"""
+    coupon_name = "纸盒免费打样券"
+    api_url = "https://www.jlc-zh.com/api/box/front/promotion/receiveCoupons"
     body = json.dumps({
-        "operationPromotionEnum": "GOODS_MARKET_COUPON_2026_6",
-        "couponIdList": ["9F0C0D9DE6F37F2A8E437E2FA0697EA100C48DB62C78334B"]
+        "couponIds": ["467971132883976193"],
+        "promotionId": "467972934473080834",
+        "promotionType": 4
     })
 
     log(f"🎫 === 开始领取{coupon_name} ===")
 
     clear_performance_logs(driver)
-    navigate_3dp_via_passport(driver)
+    navigate_zh_via_passport(driver)
     secret_key = extract_secretkey_from_logs(driver)
 
     if secret_key:
@@ -965,7 +1020,7 @@ def process_single_account(username, password, account_index, total_accounts, in
         "被邀请者优惠券",
         "FPC新客免费打样券",
         "FPC 100元优惠券",
-        "万份礼品活动专用券"
+        "纸盒免费打样券"
     ]
     coupon_result = {}
     for name in coupon_names_ordered:
@@ -1017,8 +1072,8 @@ def process_single_account(username, password, account_index, total_accounts, in
             if need_fpc1 or need_fpc2:
                 claim_fpc_coupons(driver, coupon_result, skip_coupons_list)
 
-            if not coupon_result["万份礼品活动专用券"].get('success') and "万份礼品活动专用券" not in skip_coupons_list:
-                claim_3dp_10(driver, coupon_result)
+            if not coupon_result["纸盒免费打样券"].get('success') and "纸盒免费打样券" not in skip_coupons_list:
+                claim_zh_free(driver, coupon_result)
 
         except Exception as e:
             log(f"❌ 账号处理异常: {e}")
@@ -1062,7 +1117,7 @@ def main():
         "3": "被邀请者优惠券",
         "4": "FPC新客免费打样券",
         "5": "FPC 100元优惠券",
-        "6": "万份礼品活动专用券"
+        "6": "纸盒免费打样券"
     }
     skip_coupons_list =[id_to_name[sid] for sid in skip_ids if sid in id_to_name]
 
@@ -1093,7 +1148,7 @@ def main():
         "被邀请者优惠券",
         "FPC新客免费打样券",
         "FPC 100元优惠券",
-        "万份礼品活动专用券"
+        "纸盒免费打样券"
     ]
 
     log(f"{'='*50}", show_time=False)
