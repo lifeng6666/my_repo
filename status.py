@@ -493,15 +493,16 @@ def execute_step_2(driver):
     return {'success': False, 'raw': res}
 
 
-def execute_step_3(driver):
+def execute_step_3(driver, receiveCoupon_id):
     """3.每月礼包并记录领到的券"""
-    log("▶ [步骤 3] 领取每月礼包: 开始执行")
+    log(f"▶ [步骤 3] 领取每月礼包: 开始执行")
     url1 = "https://m.jlc.com/api/appPlatform/couponPage/receiveCoupon"
     log("  [-] 正在提取礼包领取凭证 (secretkey, x-jlc-accesstoken, x-jlc-clienttype)...")
     headers = extract_custom_headers_from_logs(driver, ['secretkey', 'x-jlc-accesstoken', 'x-jlc-clienttype'])
     
     log("  [-] 正在发送首个 POST 请求领取礼包...")
-    res1 = send_post_request(driver, url1, {"id": 43}, headers)
+    # res1 = send_post_request(driver, url1, {"id": 43}, headers)
+    res1 = send_post_request(driver, url1, {"id": f"{receiveCoupon_id}"}, headers)
     if isinstance(res1, dict):
         log(f"  [-] 领奖接口返回状态码: {res1.get('code')}")
         if res1.get('code') == 200 and res1.get('success') == True:
@@ -621,7 +622,7 @@ def execute_step_5(driver):
                         "weixinCustomerId": 0,
                         "unbindFlag": "0"
                     }
-                    log(f"  [-] 正在请求解绑第 {idx} 个目标 (UnionID: {union_id}) ...")
+                    log(f"  [-] 正在请求解绑第 {idx} 个目标 (UnionID: {union_id[:8]}***) ...")
                     res_unbind = send_post_request(driver, url_unbind, unbind_body)
                     if isinstance(res_unbind, dict) and res_unbind.get('code') == 200:
                         log(f"  [+] 解绑成功")
@@ -655,7 +656,7 @@ def execute_step_5(driver):
     return result
 
 
-def process_single_account(username, password, account_index, skip_steps):
+def process_single_account(username, password, account_index, skip_steps, receiveCoupon_id):
     """处理单个账号完整流程"""
     result = {
         'username': username,
@@ -686,8 +687,8 @@ def process_single_account(username, password, account_index, skip_steps):
 
         # ====== 阶段3 ======
         if 3 not in skip_steps:
-            safe_visit_with_sso_wait(driver, "https://m.jlc.com/pages/coupon-page/index?id=43", visited_domains)
-            result['s3'] = execute_step_3(driver)
+            safe_visit_with_sso_wait(driver, f"https://m.jlc.com/pages/coupon-page/index?id={receiveCoupon_id}", visited_domains)
+            result['s3'] = execute_step_3(driver, receiveCoupon_id)
 
         # ====== 阶段4 ======
         if 4 not in skip_steps:
@@ -716,18 +717,20 @@ def process_single_account(username, password, account_index, skip_steps):
 
 
 def main():
-    if len(sys.argv) < 3:
-        print("用法: python status.py 账号1,账号2... 密码1,密码2... [跳过步骤,例:1,3]")
+    if len(sys.argv) < 4:
+        print("用法: python status.py 账号1,账号2... 密码1,密码2... [跳过步骤,例:1,3] 要领取的券ID")
         sys.exit(1)
 
     usernames = sys.argv[1].split(',')
     passwords = sys.argv[2].split(',')
     
     skip_steps = []
-    if len(sys.argv) >= 4:
+    if len(sys.argv) >= 5:
         skip_str = sys.argv[3]
         skip_steps = [int(x) for x in re.findall(r'\d+', skip_str)]
         log(f"已配置跳过步骤: {skip_steps}", show_time=False)
+        receiveCoupon_id = sys.argv[4]
+        log(f"已配置要领取的券ID: {receiveCoupon_id}", show_time=False)
 
     if len(usernames) != len(passwords):
         log("❌ 账号密码数量不匹配")
@@ -740,7 +743,7 @@ def main():
         log(f"{'='*50}", show_time=False)
         log(f"🚀 正在处理账号 {i}/{len(usernames)}", show_time=False)
         log(f"{'='*50}", show_time=False)
-        res = process_single_account(u, p, i, skip_steps)
+        res = process_single_account(u, p, i, skip_steps, receiveCoupon_id)
         all_results.append(res)
         if i < len(usernames):
             log("⏳ 等待5秒后处理下一个账号...")

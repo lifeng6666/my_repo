@@ -13,7 +13,11 @@ on:
         description: '跳过的流程（输入数字，多个用英文逗号分隔，如 1,3，默认全部执行）1检查pcb券是否触发风控 2检查通用券是否可以领取 3每月礼包并记录领到的券 4查询账号下所有处于可用状态券的有效期 5取消该账号所有微信绑定并读取公众号绑定状态'
         required: false
         default: ''
-
+      receiveCoupon_id:
+        description: '要领取的券ID'
+        # 43:每月礼包，61:SMT100元券
+        required: false
+        default: '43'
 env:
   DM_APIKEY: ${{ secrets.DM_APIKEY }}
   DM_PWD: ${{ secrets.DM_PWD }}
@@ -112,4 +116,4 @@ jobs:
 
       - name: '进行自动账号处理流程(日志在这里看)'
         run: |
-          python ./status.py "${{ matrix.usernames }}" "${{ matrix.passwords }}" "${{ github.event.inputs.skip_steps }}"
+          python ./status.py "${{ matrix.usernames }}" "${{ matrix.passwords }}" "${{ github.event.inputs.skip_steps }}" "${{ github.event.inputs.receiveCoupon_id }}"
