@@ -496,48 +496,42 @@ def execute_step_2(driver):
 def execute_step_3(driver, receiveCoupon_id):
     """3.每月礼包并记录领到的券"""
     log(f"▶ [步骤 3] 领取每月礼包: 开始执行")
-    url1 = "https://m.jlc.com/api/cgi/operationService/front/listing/activity/receive"
+    url1 = "https://m.jlc.com/api/appPlatform/couponPage/receiveCoupon"
     log("  [-] 正在提取礼包领取凭证 (secretkey, x-jlc-accesstoken, x-jlc-clienttype)...")
     headers = extract_custom_headers_from_logs(driver, ['secretkey', 'x-jlc-accesstoken', 'x-jlc-clienttype'])
     
     log("  [-] 正在发送首个 POST 请求领取礼包...")
     # res1 = send_post_request(driver, url1, {"id": 43}, headers)
-    res1 = send_post_request(driver, url1, {}, headers)
+    res1 = send_post_request(driver, url1, {"id": f"{receiveCoupon_id}"}, headers)
     if isinstance(res1, dict):
         log(f"  [-] 领奖接口返回状态码: {res1.get('code')}")
         if res1.get('code') == 200 and res1.get('success') == True:
-            if res1.get('data', {}).get("success") == True:
-
-                orderCode = res1.get('data', {}).get("orderCode")
-                log(f"  [+] 礼包领取动作成功（orderCode: {orderCode}），正在发送第二个 POST 请求查询对应礼包券详情名称...")
-                
-                url2 = "https://m.jlc.com/api/cgi/operationService/front/listing/activity/query"
-                res2 = send_post_request(driver, url2, {}, headers)
-                names = []
-                if isinstance(res2, dict):
-                    log(f"  [-] 查询详情接口返回状态码: {res2.get('code')}")
-                    if res2.get('code') == 200:
-                        for item in res2.get('data', []):
-                            name = item.get('couponResponseDto', {}).get('name')
-                            quantity = item.get('quantity')
-                            name = f"{name} x{quantity}"
-                            if name: names.append(name)
-                        log(f"  [+] 券详情解析成功，成功拉取 {len(names)} 张券的名称")
-                        return {'success': True, 'status': 'claimed', 'names': names, 'raw': res2}
-                    else:
-                        log(f"  [x] 查询券详情组接口异常: {str(res2)[:200]}")
-                        return {'success': False, 'raw': res2}
+            coupon_ids = res1.get('data', [])
+            log(f"  [+] 礼包领取动作成功，获取到券ID列表: {coupon_ids}")
+            
+            url2 = "https://m.jlc.com/api/cgi/operationService/front/customerCoupon/queryCustomerCouponGroup"
+            log("  [-] 正在发送第二个 POST 请求查询对应礼包券详情名称...")
+            res2 = send_post_request(driver, url2, {"customerCouponIds": coupon_ids}, headers)
+            names = []
+            if isinstance(res2, dict):
+                log(f"  [-] 查询详情接口返回状态码: {res2.get('code')}")
+                if res2.get('code') == 200:
+                    for item in res2.get('data', []):
+                        name = item.get('couponResponseDto', {}).get('name')
+                        if name: names.append(name)
+                    log(f"  [+] 券详情解析成功，成功拉取 {len(names)} 张券的名称")
+                    return {'success': True, 'status': 'claimed', 'names': names, 'raw': res2}
                 else:
-                    log(f"  [x] 查询详情接口返回非JSON数据: {str(res2)[:200]}")
+                    log(f"  [x] 查询券详情组接口异常: {str(res2)[:200]}")
                     return {'success': False, 'raw': res2}
             else:
-                rejectReason = res1.get('data', {}).get("rejectReason", "未知错误")
-                rejectMsg = res1.get('data', {}).get("rejectMsg", "未知错误")
-                if rejectReason == 'LIMIT_CYCLE':
-                    log(f"  [-] 已领取过")
-                    return {'success': True, 'status': 'LIMIT_CYCLE', 'reason': rejectMsg, 'raw': res1}
-                else:
-                    log(f"  [-] 领取失败，后端提示: {rejectMsg}")
+                log(f"  [x] 查询详情接口返回非JSON数据: {str(res2)[:200]}")
+                return {'success': False, 'raw': res2}
+                
+        elif res1.get('code') == 1027:
+            msg = res1.get('message', '您已领取过优惠券')
+            log(f"  [-] 检测到当前礼包当月已被领取过，后端提示: {msg}")
+            return {'success': True, 'status': 'already_claimed', 'reason': msg, 'raw': res1}
         else:
             log(f"  [x] 领奖动作接口响应异常: {str(res1)[:200]}")
     else:
