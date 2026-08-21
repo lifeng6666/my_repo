@@ -126,6 +126,29 @@ def create_chrome_driver(profile_dir, proxy_str=None, disable_images=True):
     driver = webdriver.Chrome(options=options)
     driver.set_page_load_timeout(20)
     driver.set_script_timeout(20)
+
+    # 通过 CDP 屏蔽第三方重资源（captcha SDK、统计、广告等）
+    # captcha ticket 已由 AliV3-register.py 独立获取，主浏览器无需加载这些 SDK
+    try:
+        driver.execute_cdp_cmd("Network.enable", {})
+        driver.execute_cdp_cmd("Network.setBlockedURLs", {"urls": [
+            "*://*.aliyuncs.com/*",
+            "*://*.alibaba.com/*",
+            "*://*.google-analytics.com/*",
+            "*://*.googletagmanager.com/*",
+            "*://*.googlesyndication.com/*",
+            "*://*.doubleclick.net/*",
+            "*://hm.baidu.com/*",
+            "*://*.mmstat.com/*",
+            "*://*.cnzz.com/*",
+            "*://*.qlogo.cn/*",
+            "*://*.tencent.com/*",
+            "*://*.tencent-cloud.com/*",
+            "*://*.weixin.qq.com/*",
+        ]})
+    except Exception:
+        pass
+
     return driver
 
 class HaoZhuMa:
