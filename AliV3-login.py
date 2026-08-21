@@ -70,7 +70,7 @@ class AliV3:
         chrome_options.set_argument('--allow-running-insecure-content')     # 允许运行不安全内容
         chrome_options.set_argument('--disable-features=IsolateOrigins,site-per-process')     # 禁用 IsolateOrigins 功能
         chrome_options.set_argument('--disable-site-isolation-trials')     # 禁用站点隔离试验
-        chrome_options.set_argument('--single-process')     # 单进程模式
+        # chrome_options.set_argument('--single-process')     # 单进程模式
         chrome_options.set_argument('--disable-setuid-sandbox')     # 禁用 Setuid 沙箱
         chrome_options.set_argument('--disable-hang-monitor')     # 禁用挂起监控
         chrome_options.set_argument('--disable-popup-blocking')     # 禁用弹出窗口阻塞

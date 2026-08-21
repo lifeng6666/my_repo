@@ -132,7 +132,7 @@ class AliV3:
         co.set_argument('--allow-running-insecure-content')
         co.set_argument('--disable-features=IsolateOrigins,site-per-process')
         co.set_argument('--disable-site-isolation-trials')
-        co.set_argument('--single-process')
+        # co.set_argument('--single-process')
         co.set_argument('--disable-setuid-sandbox')
         co.set_argument('--disable-hang-monitor')
         co.set_argument('--disable-popup-blocking')
