@@ -112,7 +112,7 @@ def create_chrome_driver(profile_dir, proxy_str=None, disable_images=True):
     options.add_argument('--safebrowsing-disable-auto-update')
     options.add_argument('--enable-features=NetworkServiceInProcess2')
     options.add_argument('--disable-features=IsolateOrigins,site-per-process')
-    options.add_argument('--js-flags=--max-old-space-size=512')
+    options.add_argument('--js-flags=--max-old-space-size=1024')
     
     options.add_argument('--window-size=1366,768')
     options.add_argument('--disable-blink-features=AutomationControlled')
