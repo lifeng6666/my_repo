@@ -132,7 +132,7 @@ jobs:
       - name: '安装依赖'
         run: |
           pip install --upgrade pip
-          pip install requests==2.26.0 selenium==3.141.0 lxml==4.6.5 retrying==1.3.3 wheel==0.37.1 PyExecJS DrissionPage DataRecorder DownloadKit psutil
+          pip install requests==2.26.0 selenium==4.47.0 lxml==4.6.5 retrying==1.3.3 wheel==0.37.1 PyExecJS DrissionPage DataRecorder DownloadKit psutil
 
       - name: '准备Chrome驱动'
         uses: nanasess/setup-chromedriver@v2
