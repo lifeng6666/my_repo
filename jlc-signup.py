@@ -86,7 +86,10 @@ def cleanup_zombie_chrome():
 
 def create_chrome_driver(profile_dir, proxy_str=None, disable_images=True):
     options = Options()
-    options.page_load_strategy = 'eager'
+    # page_load_strategy='none' 让 driver.get() 立即返回，不等待任何 load 事件
+    # 避免 GitHub Actions 跨境网络抖动时 Chrome 渲染进程卡在等待事件导致 DevTools 协议超时
+    # 后续由 safe_get_page 主动轮询 document.readyState 来判断页面是否就绪
+    options.page_load_strategy = 'none'
     options.add_argument(f"--user-data-dir={profile_dir}")
     
     if proxy_str:
@@ -126,29 +129,6 @@ def create_chrome_driver(profile_dir, proxy_str=None, disable_images=True):
     driver = webdriver.Chrome(options=options)
     driver.set_page_load_timeout(20)
     driver.set_script_timeout(20)
-
-    # 通过 CDP 屏蔽第三方重资源（captcha SDK、统计、广告等）
-    # captcha ticket 已由 AliV3-register.py 独立获取，主浏览器无需加载这些 SDK
-    try:
-        driver.execute_cdp_cmd("Network.enable", {})
-        driver.execute_cdp_cmd("Network.setBlockedURLs", {"urls": [
-            "*://*.aliyuncs.com/*",
-            "*://*.alibaba.com/*",
-            "*://*.google-analytics.com/*",
-            "*://*.googletagmanager.com/*",
-            "*://*.googlesyndication.com/*",
-            "*://*.doubleclick.net/*",
-            "*://hm.baidu.com/*",
-            "*://*.mmstat.com/*",
-            "*://*.cnzz.com/*",
-            "*://*.qlogo.cn/*",
-            "*://*.tencent.com/*",
-            "*://*.tencent-cloud.com/*",
-            "*://*.weixin.qq.com/*",
-        ]})
-    except Exception:
-        pass
-
     return driver
 
 class HaoZhuMa:
@@ -568,25 +548,51 @@ def register_account(hzm, config, email_index, fixed_password, app_id, register_
     driver = None
     proxy_str = None
     
-    def safe_get_page(target_driver, url, max_retries=2):
+    def safe_get_page(target_driver, url, max_retries=2, ready_timeout=25):
+        """
+        page_load_strategy='none' 下 driver.get() 会立即返回，不会因等待 load 事件而触发
+        renderer 超时。这里主动轮询 document.readyState，等到 'interactive' 即可继续。
+        """
         for attempt in range(max_retries):
             try:
                 target_driver.get(url)
-                return  
             except TimeoutException as te:
-                log(f"⚠ 页面加载超时 ({attempt+1}/{max_retries}): 触发 window.stop() 强行停止渲染...")
-                try:
-                    target_driver.execute_script("window.stop();")
-                except:
-                    pass
+                log(f"⚠ driver.get 超时 ({attempt+1}/{max_retries}): {te}")
                 if attempt == max_retries - 1:
                     raise BrowserError(f"连续 {max_retries} 次加载 {url} 失败: {te}")
                 time.sleep(2)
+                continue
             except Exception as e:
                 log(f"⚠ 页面加载底层异常 ({attempt+1}/{max_retries}): {e}")
                 if attempt == max_retries - 1:
                     raise BrowserError(f"页面加载彻底崩溃: {e}")
                 time.sleep(2)
+                continue
+
+            # 主动轮询 readyState，给页面最多 ready_timeout 秒到达 interactive
+            deadline = time.time() + ready_timeout
+            ready = False
+            while time.time() < deadline:
+                try:
+                    state = target_driver.execute_script("return document.readyState;")
+                    if state in ("interactive", "complete"):
+                        ready = True
+                        break
+                except Exception:
+                    pass
+                time.sleep(0.5)
+
+            if ready:
+                return
+
+            log(f"⚠ 页面 {ready_timeout}s 未到达 interactive ({attempt+1}/{max_retries}): 触发 window.stop()...")
+            try:
+                target_driver.execute_script("window.stop();")
+            except Exception:
+                pass
+            if attempt == max_retries - 1:
+                raise BrowserError(f"连续 {max_retries} 次加载 {url} 失败: readyState 轮询超时")
+            time.sleep(2)
 
     def safe_fetch(url, method="POST", body=None, max_retries=3, **kwargs):
         nonlocal driver, proxy_str
